@@ -1,0 +1,24 @@
+# Local Postgres 18 with PostGIS 3.6, the same majors as production (PlanetScale Postgres 18, PostGIS 3.6).
+# imresamu/postgis is built by the PostGIS Docker maintainer and, unlike postgis/postgis, ships arm64 images,
+# so it runs natively under OrbStack on Apple silicon.
+# A fixed project name: another checkout's compose project would otherwise also be called "cloud".
+name: openskatemap
+services:
+  db:
+    image: imresamu/postgis:18-3.6-alpine
+    environment:
+      POSTGRES_USER: openskatemap
+      POSTGRES_PASSWORD: openskatemap
+      POSTGRES_DB: openskatemap
+    ports:
+      - "54330:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openskatemap -d openskatemap"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - openskatemap-pg:/var/lib/postgresql
+      - ./docker/init-app-role.sql:/docker-entrypoint-initdb.d/init-app-role.sql:ro
+volumes:
+  openskatemap-pg:

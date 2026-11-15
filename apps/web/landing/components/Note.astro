@@ -1,0 +1,13 @@
+---
+import { Image } from "astro:assets";
+import { type Face, faceURL } from "../data/faces";
+import icon from "../assets/icons/simple.png";
+
+type Props = { title: string; body: string; face: Face; class?: string };
+const { title, body, face, class: className } = Astro.props;
+---
+
+<div class:list={["note", className]}>
+  <span class="face"><img src={faceURL(face)} width="40" height="40" alt="" loading="lazy" decoding="async" /><Image class="badge-app" src={icon} width={16} densities={[1, 2, 3]} alt="" loading="lazy" decoding="async" /></span>
+  <p><b>{title}</b><span>{body}</span></p>
+</div>

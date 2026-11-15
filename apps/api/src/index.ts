@@ -1,0 +1,55 @@
+import { type Database, openDatabase } from "@openskatemap/db";
+import { createApp } from "./app.ts";
+import { parsePushSettings, type PushMessage, sendPushes } from "./lib/buzzkit.ts";
+import { logFailure } from "./lib/log.ts";
+import { SCHEDULES } from "./schedules.ts";
+import { newSpotsDigest, reviewEscalations } from "./services/notifications.ts";
+import { eraseElsewhere } from "./services/account.ts";
+import { deleteDueAccounts } from "./services/apple-account-events.ts";
+import { deleteSweptPhotos, sweep } from "./services/housekeeping.ts";
+import { refreshSpotScores } from "./services/spot-score.ts";
+
+const app = createApp();
+
+/** One connection for the job, closed before anything slower (pushes, R2) happens; undefined when it failed. */
+async function onDatabase<T>(env: Env, label: string, job: (db: Database) => Promise<T>): Promise<T | undefined> {
+  const database = await openDatabase(env.HYPERDRIVE.connectionString);
+  try {
+    return await job(database.db);
+  } catch (error) {
+    logFailure(`${label} failed`, error);
+    return undefined;
+  } finally {
+    await database.close();
+  }
+}
+
+async function pushJob(env: Env, label: string, compose: (db: Database) => Promise<PushMessage[]>) {
+  const push = parsePushSettings(env);
+  if (!push) return;
+  const notices = await onDatabase(env, label, compose);
+  if (notices) await sendPushes(push, notices);
+}
+
+export default {
+  fetch: app.fetch,
+  async scheduled(controller, env) {
+    const now = new Date(controller.scheduledTime);
+    switch (controller.cron) {
+      case SCHEDULES.spotScores:
+        await onDatabase(env, "Spot scores refresh", refreshSpotScores);
+        return;
+      case SCHEDULES.housekeeping: {
+        const swept = await onDatabase(env, "Housekeeping", (db) => sweep(db, now));
+        if (swept) await deleteSweptPhotos(env.PHOTOS, swept);
+        const deleted = await onDatabase(env, "Apple account deletions", (db) => deleteDueAccounts(db, env.PHOTOS, now));
+        await Promise.all((deleted ?? []).flatMap((userId) => eraseElsewhere(env, userId)));
+        return;
+      }
+      case SCHEDULES.newSpotsDigest:
+        return pushJob(env, "New spots digest", (db) => newSpotsDigest(db, now));
+      case SCHEDULES.reviewEscalations:
+        return pushJob(env, "Review escalations", (db) => reviewEscalations(db, now));
+    }
+  },
+} satisfies ExportedHandler<Env>;

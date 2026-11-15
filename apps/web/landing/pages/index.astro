@@ -1,0 +1,329 @@
+---
+import "../styles/site.css";
+import { getImage, Image } from "astro:assets";
+import Screen from "../components/Screen.astro";
+import Note from "../components/Note.astro";
+import pinRepublique from "../assets/spots/pin-republique.png";
+import pinNation from "../assets/spots/pin-nation.png";
+import pinBercy from "../assets/spots/pin-bercy.png";
+import tileRepublique from "../assets/spots/tile-republique.jpg";
+import tileBrooklyn from "../assets/spots/tile-brooklyn.jpg";
+import tileKulturforum from "../assets/spots/tile-kulturforum.jpg";
+import tileArc from "../assets/spots/tile-arc.jpg";
+import aceTurnRight from "../assets/videos/ace-turn-right.jpg";
+import lucienBoardslide from "../assets/videos/lucien-boardslide-hood.jpg";
+import icon from "../assets/icons/simple.png";
+import testflightIcon from "../assets/icons/testflight.png";
+import emptyRail from "../assets/street/empty-rail.jpg";
+import southbank from "../assets/street/southbank-undercroft.jpg";
+import credits from "../assets/street/credits.json";
+import discover from "../assets/screens/discover.png";
+import discoverLifted from "../assets/screens/discover-lifted.png";
+import spot from "../assets/screens/spot.png";
+import newSpot from "../assets/screens/new-spot.png";
+import review from "../assets/screens/review.png";
+import collection from "../assets/screens/collection.png";
+
+const testFlight = "https://testflight.apple.com/join/3pFyeYVS";
+
+const app = {
+  "@context": "https://schema.org",
+  "@type": "MobileApplication",
+  name: "OpenSkateMap",
+  url: "https://openskatemap.app/",
+  description: "The street spots in your city on one map, checked by locals who skate them.",
+  operatingSystem: "iOS",
+  applicationCategory: "SportsApplication",
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  installUrl: testFlight,
+  image: new URL("/apple-touch-icon.png", Astro.site).href,
+  screenshot: await Promise.all([discover, spot, newSpot, review, collection].map(async (src) => new URL((await getImage({ src, width: 660, format: "webp" })).src, Astro.site).href)),
+};
+const github = "https://github.com/OpenSkateMap";
+
+
+const heroPins = [
+  { src: tileRepublique, name: "Place de la République", city: "Paris" },
+  { src: tileBrooklyn, name: "Brooklyn Banks", city: "New York" },
+  { src: tileKulturforum, name: "Kulturforum", city: "Berlin" },
+  { src: tileArc, name: "Arc de Triomf", city: "Barcelona" },
+];
+
+const heroNotes = [
+  { title: "Kulturforum is on the map", body: "A curator approved it", face: "andre" as const, far: false },
+  { title: "Your edit to Bastille is live", body: "A curator approved it", face: "lucia" as const, far: true },
+  { title: "Maya invited you to a collection", body: "Summer trip", face: "maya" as const, far: false },
+  { title: "A suggested edit to your spot", body: "Place de la République", face: "sam" as const, far: true },
+];
+
+const obstacles = ["Ledges", "Stairs", "Banks", "Benches", "Rails", "Flatground"];
+
+const conditions = [
+  { name: "Skateable", note: "Go skate" },
+  { name: "Knobbed", note: "Bring a wrench" },
+  { name: "Busty", note: "Go early" },
+  { name: "Demolished", note: "Gone for good" },
+];
+
+const promises = [
+  { key: "No ads.", rest: " Nothing locked.", note: "Every spot and every feature, free." },
+  { key: "Private", rest: " spots stay private.", note: "Share a DIY or a quiet spot with your crew only." },
+  { key: "Clips", rest: " from the spot.", note: "YouTube and Instagram parts filmed right there." },
+  { key: "No signal?", rest: " Still there.", note: "The map lives on your phone, so spots load even without internet." },
+];
+
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="color-scheme" content="light" />
+    <title>OpenSkateMap: the street spots in your city on one map</title>
+    <meta name="description" content="The street spots in your city on one map, checked by locals who skate them." />
+    <link rel="canonical" href="https://openskatemap.app/" />
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" type="image/png" href="/favicon.png" sizes="96x96" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <script is:inline type="application/ld+json" set:html={JSON.stringify(app)} />
+  </head>
+  <body>
+    <header class="nav">
+      <div class="wrap nav-row">
+        <a class="brand" href="#top"><Image src={icon} width={32} densities={[1, 2, 3]} alt="" loading="eager" decoding="sync" />OpenSkateMap</a>
+        <nav class="nav-links" aria-label="Site">
+          <a href="#before">How it works</a>
+          <a href="#after">Curators</a>
+          <a href={github}>GitHub</a>
+          <a href="/support">Support</a>
+        </nav>
+        <a class="tf tf-small" href={testFlight}><Image src={testflightIcon} width={20} densities={[1, 2, 3]} alt="" loading="eager" decoding="sync" />Join on TestFlight</a>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero wrap">
+        <div class="hero-pins" aria-hidden="true">
+          {heroPins.map((pin, i) => (
+            <figure class={`hero-pin hp-${i + 1}`}>
+              <Image src={pin.src} widths={[64, 104, 156, 208, 312]} sizes="(max-width: 900px) 62px, 104px" alt="" loading="eager" decoding="async" fetchpriority="low" />
+              <figcaption>{pin.name}<span>{pin.city}</span></figcaption>
+            </figure>
+          ))}
+        </div>
+        <h1>All over town</h1>
+        <p class="lede">The street spots in your city on one map, with photos, what’s there to skate and how it is right now.<span class="more"> Added by skaters, checked by locals who skate them.</span></p>
+        <div class="badges">
+          <a class="badge" href={testFlight}><Image src={testflightIcon} width={34} densities={[1, 2, 3]} alt="" loading="eager" decoding="sync" /><span><b>Free for iPhone</b>On TestFlight</span></a>
+          <a class="badge" href={github}><svg width="32" height="32" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" /></svg><span><b>Built in the open</b>On GitHub</span></a>
+        </div>
+
+        <div class="stage">
+          {heroNotes.map((n) => <Note class:list={["stage-note", { far: n.far }]} title={n.title} body={n.body} face={n.face} />)}
+          <Screen class="stage-phone" src={discover} alt="The map in OpenSkateMap with spot photos on it in Paris" eager sizes="(max-width: 900px) 245px, 324px" />
+        </div>
+      </section>
+
+
+      <section class="chapter dark" id="before">
+        <div class="wrap">
+          <div class="chapter-head">
+            <h2>Everything you’d ask a local, before you get there.</h2>
+            <p>Spots live in Instagram stories, old video parts and someone’s DMs. OpenSkateMap puts them on one map, with photos, what’s there to skate and how it is right now.</p>
+          </div>
+
+          <div class="bento">
+            <article class="card wide">
+              <div class="card-copy">
+                <h3>Seen it in a part? Find it.</h3>
+                <p>Every spot has its photos, what’s there to skate and the clips filmed at it. Tap Directions and your maps app takes it from there.</p>
+              </div>
+              <div class="phone-stage">
+                <Screen src={spot} alt="Place de la République in OpenSkateMap: photo, obstacles, address and Directions" />
+                <div class="float videos">
+                  <div class="videos-head" aria-hidden="true"><b>Videos</b><span>Add Video</span></div>
+                  <div class="video-row">
+                    <a class="video-card" href="https://www.youtube.com/watch?v=mZEVi6EvJPc" target="_blank" rel="noopener" aria-label="Ace Trucks: Turn Right, on YouTube">
+                      <Image src={aceTurnRight} widths={[200, 400]} sizes="200px" alt="" loading="lazy" decoding="async" />
+                      <p aria-hidden="true"><b>Ace Trucks – ‘Turn Right’</b><span>YouTube · Added by Maya</span></p>
+                    </a>
+                    <a class="video-card peek" href="https://www.youtube.com/watch?v=fQ0Il9tOfsA" target="_blank" rel="noopener" aria-label="Lucien Genand: Boardslide Hood, on YouTube">
+                      <Image src={lucienBoardslide} widths={[120, 240, 360]} sizes="120px" alt="" loading="lazy" decoding="async" />
+                      <p aria-hidden="true"><b>Lucien Genand: ‘Boardslide Hood’</b><span>YouTube · Added by Leo</span></p>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article class="card photo">
+              <Image class="card-bg" src={emptyRail} alt="" widths={[480, 720, 960, 1160]} sizes="(max-width: 900px) calc(100vw - 40px), 580px" quality={62} loading="lazy" decoding="async" />
+              <div class="card-copy">
+                <h3>Knobbed since Tuesday.</h3>
+                <p>Locals mark how a spot is right now, so you don’t push across town for nothing.</p>
+              </div>
+              <ul class="conditions">
+                {conditions.map((c) => <li><b>{c.name}</b><span>{c.note}</span></li>)}
+              </ul>
+            </article>
+
+            <article class="card">
+              <div class="card-copy">
+                <h3>Know what’s there.</h3>
+                <p>Every spot lists what there is to skate. Filter the map by what you want to skate today.</p>
+              </div>
+              <ul class="chips">
+                {obstacles.map((o) => <li>#&nbsp;{o}</li>)}
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="chapter" id="at">
+        <div class="wrap">
+          <div class="chapter-head">
+            <h2>New city, no crew.</h2>
+            <p>Open the map wherever you land. The pins are street spots skaters added, each with a photo you’d recognise from the corner.</p>
+          </div>
+
+          <div class="bento">
+            <article class="card wide light">
+              <div class="card-copy">
+                <h3>The plaza, the ledges, the banks.</h3>
+                <p>Spots show up as their photos on the map, so you know which corner is worth the push.</p>
+              </div>
+              <div class="phone-stage">
+                <Screen src={discoverLifted} alt="The map in OpenSkateMap with spot photos on it" />
+                <div class="lifts" aria-hidden="true">
+                  {[pinRepublique, pinNation, pinBercy].map((src, i) => (
+                    <span class={`lift lift-${i + 1}`}><span class="lift-pin"><Image src={src} width={50} densities={[1, 1.5, 2]} alt="" loading="lazy" decoding="async" /></span></span>
+                  ))}
+                </div>
+              </div>
+            </article>
+
+            <article class="card light">
+              <div class="card-copy">
+                <h3>Know one that’s missing?</h3>
+                <p>Add it from where you’re standing, with a photo. You’ll hear when it’s on the map.</p>
+              </div>
+              <div class="notes">
+                <Note title="Kulturforum is on the map" body="A curator approved it" face="andre" />
+                <Note title="Your edit to Bastille is live" body="A curator approved it" face="lucia" />
+                <Note title="Your video of Southbank Undercroft is up" body="The spot’s owner approved it" face="kenji" />
+              </div>
+            </article>
+
+            <article class="card light phone-card">
+              <div class="card-copy">
+                <h3>Name it, pin it, add a photo.</h3>
+                <p>Say what’s there to skate, and credit the photographer if it isn’t yours.</p>
+              </div>
+              <Screen class="card-phone" src={newSpot} alt="New Spot in OpenSkateMap filled in for Kulturforum, Berlin" />
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="chapter" id="after">
+        <div class="wrap">
+          <div class="chapter-head">
+            <h2>Checked by locals.</h2>
+            <p>Every new spot and every change goes past a curator who skates that city. They approve it, fix it or turn it down, with a reason you can read.</p>
+          </div>
+
+          <div class="bento">
+            <article class="card wide light">
+              <div class="card-copy">
+                <h3>A real person on every pin.</h3>
+                <p>Curators see the photos, the spot on the map and the note from whoever sent it, then decide.</p>
+              </div>
+              <div class="phone-stage">
+                <Screen src={review} alt="A curator’s review queue in OpenSkateMap with Approve and Reject" />
+                <div class="float review-actions" aria-hidden="true">
+                  <i><svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6L6 18" /></svg>Reject</i>
+                  <i class="primary"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7" /></svg>Approve</i>
+                </div>
+              </div>
+            </article>
+
+            <article class="card light">
+              <div class="card-copy">
+                <h3>Bring the crew.</h3>
+                <p>Save spots to a list for the weekend and share it. Private spots stay between the people you pick.</p>
+              </div>
+              <div class="notes">
+                <Note title="Maya invited you to a collection" body="Summer trip" face="maya" />
+                <Note title="Leo asked to join" body="Summer trip" face="leo" />
+                <Note title="Maya let you in" body="Weekend in Paris" face="maya" />
+              </div>
+            </article>
+
+            <article class="card light phone-card">
+              <div class="card-copy">
+                <h3>Lists for every trip.</h3>
+                <p>Barcelona first, then London and Paris. Everyone on the list sees the same spots.</p>
+              </div>
+<Screen class="card-phone" src={collection} alt="A shared collection of spots in OpenSkateMap" />
+            </article>
+
+            <article class="card wide curate">
+              <div class="card-copy">
+                <h3>Run your city.</h3>
+                <p>Know every ledge in town? Curators decide what goes on the map where they skate: they approve new spots, fix edits and turn down what doesn’t belong.</p>
+              </div>
+              <div class="notes">
+                <Note title="A new spot to review" body="Brooklyn Banks in New York" face="leo" />
+                <Note title="A suggested edit to review" body="Place de la République in Paris" face="sam" />
+                <Note title="A new video to review" body="Kulturforum in Berlin" face="kenji" />
+              </div>
+              <a class="card-link" href="/support">Ask to Curate Your City</a>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="promises wrap">
+        <h2>More reasons to take it on your next session</h2>
+        <ul>
+          {promises.map((item) => (
+            <li>
+              <b><em>{item.key}</em>{item.rest}</b>
+              <span>{item.note}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section class="close wrap">
+        <figure class="close-photo">
+          <Image src={southbank} alt="Skaters pushing through the Southbank Undercroft in London at night" widths={[480, 760, 1000, 1520]} sizes="(max-width: 800px) calc(100vw - 40px), 760px" quality={70} loading="lazy" decoding="async" />
+        </figure>
+        <h2>See you at the spot.</h2>
+        <p>Free for iPhone. On the App Store soon.</p>
+        <a class="tf" href={testFlight}><Image src={testflightIcon} width={24} densities={[1, 2, 3]} alt="" loading="lazy" decoding="async" />Join on TestFlight</a>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="wrap foot-row">
+        <nav aria-label="Footer">
+          <a href={testFlight}>Get the App</a>
+          <a href={github}>GitHub</a>
+          <a href="/support">Support</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+        </nav>
+      </div>
+      <p class="wrap credits">
+        Photos from Wikimedia Commons:{" "}
+        {credits.map((c, i) => <Fragment>{i > 0 && "; "}<a href={c.page}>{c.author}</a> ({c.licence})</Fragment>)}.
+      </p>
+    </footer>
+    <script src="../scripts/site.ts"></script>
+  </body>
+</html>

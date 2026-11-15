@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "types": ["bun"] },
+  "include": ["src", "scripts", "test", "e2e", "cloudflare.config.ts", "vite.config.ts", ".cloudflare/types"]
+}

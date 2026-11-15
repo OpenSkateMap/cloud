@@ -1,0 +1,19 @@
+[
+ { "file": "discover", "spot": "Place de la République", "author": "Gerda Arendt", "licence": "CC0", "page": "https://commons.wikimedia.org/wiki/File:Place_de_la_R%C3%A9publique,_Paris.jpg" },
+ { "file": "discover", "spot": "Beaubourg", "author": "Nicolas Vigier", "licence": "CC0", "page": "https://commons.wikimedia.org/wiki/File:Place_Georges_Pompidou,_Paris.jpg" },
+ { "file": "discover", "spot": "Bastille", "author": "Gerda Arendt", "licence": "CC0", "page": "https://commons.wikimedia.org/wiki/File:From_market_to_Place_de_la_Bastille,_Paris.jpg" },
+ { "file": "discover", "spot": "Nation", "author": "Gary Todd", "licence": "CC0", "page": "https://commons.wikimedia.org/wiki/File:Place_de_la_Nation_(28165852692).jpg" },
+ { "file": "discover", "spot": "Bercy", "author": "Dinkum", "licence": "CC0", "page": "https://commons.wikimedia.org/wiki/File:Parc_de_Bercy_en_hiver.JPG" },
+ { "file": "discover-lifted", "spot": "Beaubourg", "author": "Nicolas Vigier", "licence": "CC0", "page": "https://commons.wikimedia.org/wiki/File:Place_Georges_Pompidou,_Paris.jpg" },
+ { "file": "discover-lifted", "spot": "Bastille", "author": "Gerda Arendt", "licence": "CC0", "page": "https://commons.wikimedia.org/wiki/File:From_market_to_Place_de_la_Bastille,_Paris.jpg" },
+ { "file": "spot", "spot": "Place de la République", "author": "Gerda Arendt", "licence": "CC0", "page": "https://commons.wikimedia.org/wiki/File:Place_de_la_R%C3%A9publique,_Paris.jpg" },
+ { "file": "collection", "spot": "Arc de Triomf", "author": "Vassil", "licence": "CC0", "page": "https://commons.wikimedia.org/wiki/File:34_Barcelona_Arc_de_Triomf_31072016.jpg" },
+ { "file": "collection", "spot": "Southbank Undercroft", "author": "Brandon Wong", "licence": "CC0", "page": "https://commons.wikimedia.org/wiki/File:London,_United_Kingdom_(Unsplash_rTUFg_FW-rg).jpg" },
+ { "file": "collection", "spot": "Place de la République", "author": "Gerda Arendt", "licence": "CC0", "page": "https://commons.wikimedia.org/wiki/File:Place_de_la_R%C3%A9publique,_Paris.jpg" },
+ { "file": "collection", "spot": "Trocadéro", "author": "Nicolas Vigier", "licence": "CC0", "page": "https://commons.wikimedia.org/wiki/File:Esplanade_du_Trocad%C3%A9ro,_Paris.jpg" },
+ { "file": "collection", "spot": "Parc del Fòrum", "author": "Zarateman", "licence": "CC0", "page": "https://commons.wikimedia.org/wiki/File:Barcelona_-_Parc_del_F%C3%B2rum_02.jpg" },
+ { "file": "new-spot", "spot": "Kulturforum", "author": "Marsupium", "licence": "CC0", "page": "https://commons.wikimedia.org/wiki/File:Kunstgewerbemuseum_Berlin_Kulturforum_entrance.jpg" },
+ { "file": "new-spot", "spot": "Kulturforum", "author": "Membeth", "licence": "CC0", "page": "https://commons.wikimedia.org/wiki/File:Kulturforum.Berlin.2.jpg" },
+ { "file": "new-spot", "spot": "Kulturforum", "author": "Oursana", "licence": "CC0", "page": "https://commons.wikimedia.org/wiki/File:Gem%C3%A4ldegalerie_am_Kulturforum_Berlin.JPG" },
+ { "file": "review", "spot": "Brooklyn Banks", "author": "Waterfelt", "licence": "CC0", "page": "https://commons.wikimedia.org/wiki/File:Upper_Brooklyn_Banks_in_2023.jpg" }
+]

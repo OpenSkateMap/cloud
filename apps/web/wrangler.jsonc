@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "openskatemap-web",
+  "account_id": "c9c7c46abcf1e3b57e5f03f53028ec46",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-25",
+  "workers_dev": false,
+  "preview_urls": true,
+  "routes": [{ "pattern": "openskatemap.app", "custom_domain": true }],
+  // scripts/build-pages.ts writes .pages. The Worker runs first only for spot pages, spot cards, the analytics proxy and
+  // the pages with a Markdown twin (`markdownTwins`); everything else is served as a static asset.
+  "assets": {
+    "directory": ".pages",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/spots/*", "/cards/spots/*", "/ph/*", "/", "/privacy", "/terms", "/support"]
+  },
+  "services": [{ "binding": "API", "service": "openskatemap-api" }],
+  "images": { "binding": "IMAGES" },
+  // The API's uptime check (`checkAPIHealth`).
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "observability": {
+    "enabled": true,
+    "logs": { "invocation_logs": true },
+    "traces": { "enabled": true, "head_sampling_rate": 0.1 }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "name": "@openskatemap/api",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "dev": "cf dev",
+    "build": "cf build",
+    "deploy": "cf deploy",
+    "types": "cf workers types",
+    "typecheck": "cf workers types && tsc -p tsconfig.json",
+    "test": "bun test ./test",
+    "openapi": "bun run scripts/openapi.ts",
+    "e2e": "bun test ./e2e",
+    "create-city": "bun run scripts/create-city.ts",
+    "seed:local": "bun run scripts/seed-local.ts",
+    "grant-editor": "bun run scripts/grant-editor.ts"
+  },
+  "dependencies": {
+    "@hono/zod-openapi": "^1.6.0",
+    "@openskatemap/db": "workspace:*",
+    "better-auth": "^1.7.7",
+    "drizzle-orm": "~0.45.4",
+    "hono": "^4.13.13",
+    "jose": "^6.2.12",
+    "neverthrow": "^8.2.0",
+    "obscenity": "^0.4.6",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "2.0.0-beta.sha-52b0dc0e9",
+    "@types/bun": "^1.4.2",
+    "@types/pg": "^8.23.0",
+    "cf": "1.0.0-beta.12",
+    "pg": "^8.23.0",
+    "vite": "^8.3.4"
+  }
+}

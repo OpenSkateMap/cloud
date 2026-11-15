@@ -1,0 +1,5 @@
+.pages/
+.site/
+.astro/
+.wrangler/
+.dev.vars

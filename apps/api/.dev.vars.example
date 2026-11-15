@@ -1,0 +1,14 @@
+# Secrets `cf dev` reads for the local Worker. Copy to .dev.vars (git-ignored) and fill in:
+#   cp apps/api/.dev.vars.example apps/api/.dev.vars
+# Any random value of 32+ characters works locally; production's lives in 1Password (see AGENTS.md → Deploying).
+#   openssl rand -base64 32
+BETTER_AUTH_SECRET=
+# `cf dev` wants every secret in cloudflare.config.ts listed; an empty value turns these off.
+# The Sign in with Apple key, to keep and revoke Apple's tokens locally (the .p8 body: base64 on one line, no PEM
+# header or footer).
+APPLE_SIGN_IN_KEY=
+# Push through BuzzKit (AGENTS.md → Push notifications): a `bk_ws_` key and the tenant's identity secret.
+BUZZKIT_API_KEY=
+BUZZKIT_IDENTITY_SECRET=
+# PostHog's personal API key (`phx_`, person:write only), to delete an account's analytics (AGENTS.md → Analytics).
+POSTHOG_PERSONAL_API_KEY=

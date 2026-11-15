@@ -1,0 +1,18 @@
+name: Proposal
+description: A new endpoint, or a change to the rules about who can see or change what. Agree on it here before writing code.
+labels: [proposal]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What's hard or missing today, and for whom.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What you'd change. Sketches or screenshots welcome.
+    validations:
+      required: true

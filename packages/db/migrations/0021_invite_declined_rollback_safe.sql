@@ -1,0 +1,1 @@
+ALTER TABLE "collection_invite" DROP CONSTRAINT "collection_invite_declined";

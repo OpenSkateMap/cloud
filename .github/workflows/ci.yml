@@ -1,0 +1,127 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: check-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    services:
+      db:
+        # Through Google's Docker Hub mirror: anonymous Docker Hub pulls from shared runners hit the rate limit.
+        image: mirror.gcr.io/imresamu/postgis:18-3.6-alpine
+        env:
+          POSTGRES_USER: openskatemap
+          POSTGRES_PASSWORD: openskatemap
+          POSTGRES_DB: openskatemap
+        ports: ["54330:5432"]
+        options: >-
+          --health-cmd "pg_isready -U openskatemap -d openskatemap" --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      DATABASE_URL: postgres://openskatemap:openskatemap@localhost:54330/openskatemap
+      DATABASE_URL_APP: postgres://openskatemap_app:openskatemap_app@localhost:54330/openskatemap
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run typecheck
+      - name: Create the restricted role the API runs as
+        run: PGPASSWORD=openskatemap psql -h localhost -p 54330 -U openskatemap -d openskatemap -f docker/init-app-role.sql
+      - run: bun run db:migrate
+      - run: bun run test
+      - name: End-to-end against Postgres as the restricted app role
+        env:
+          E2E_DATABASE_URL: postgres://openskatemap_app:openskatemap_app@localhost:54330/openskatemap
+        run: bun run --filter @openskatemap/api e2e
+      - name: The committed OpenAPI spec matches the routes
+        run: |
+          bun run openapi
+          git diff --exit-code apps/api/openapi.json
+      # Bundles the Worker the way a deploy does, so a bad import or binding fails the PR. Needs no credentials.
+      - name: The Worker bundles
+        run: bun run --filter @openskatemap/api build
+      - name: The website builds
+        run: bun run --filter @openskatemap/web build
+
+  deploy:
+    needs: check
+    # Switched on by the repository variable DEPLOY_ENABLED=true once CLOUDFLARE_API_TOKEN exists in the
+    # production environment. Until then deploys are manual (`bun run deploy` with the cf login).
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: https://api.openskatemap.app/v1/health
+    concurrency:
+      group: production
+      cancel-in-progress: false
+    env:
+      # Not a secret: the same id is pinned in apps/api/cloudflare.config.ts. The cf commands below that are not
+      # driven by that config (deployments list/create) read it from here.
+      CLOUDFLARE_ACCOUNT_ID: c9c7c46abcf1e3b57e5f03f53028ec46
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      # Each step sees only what it needs: the migration role never shares an environment with the Cloudflare token.
+      - name: Migrate the database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_MIGRATE }}
+          DATABASE_URL_APP: ${{ secrets.DATABASE_URL_APP }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "Missing production secret: DATABASE_URL_MIGRATE" >&2; exit 1; fi
+          if [ -z "$DATABASE_URL_APP" ]; then echo "Missing production secret: DATABASE_URL_APP" >&2; exit 1; fi
+          bun run db:migrate
+      - name: Remember the live version, to roll back to
+        id: live
+        working-directory: apps/api
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo "Missing production secret: CLOUDFLARE_API_TOKEN" >&2; exit 1; fi
+          version="$(bunx cf workers deployments list --worker openskatemap-api | jq -er '(.deployments // .)[0].versions | max_by(.percentage) | .version_id')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Deploy code and Worker secrets together
+        working-directory: apps/api
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          APPLE_SIGN_IN_KEY: ${{ secrets.APPLE_SIGN_IN_KEY }}
+        run: |
+          for name in BETTER_AUTH_SECRET APPLE_SIGN_IN_KEY; do
+            if [ -z "${!name}" ]; then echo "Missing production secret: $name" >&2; exit 1; fi
+          done
+          secret_file="$(mktemp "$RUNNER_TEMP/worker-secrets.XXXXXX")"
+          trap 'rm -f "$secret_file"' EXIT
+          chmod 600 "$secret_file"
+          printf 'BETTER_AUTH_SECRET=%s\nAPPLE_SIGN_IN_KEY=%s\n' "$BETTER_AUTH_SECRET" "$APPLE_SIGN_IN_KEY" > "$secret_file"
+          bunx cf deploy --secrets-file "$secret_file" --tag "$GITHUB_SHA" --message "$GITHUB_SHA"
+      - name: The live API answers
+        run: curl --fail --silent --show-error --retry 10 --retry-delay 3 --retry-all-errors https://api.openskatemap.app/v1/health | jq -e '.ok == true'
+      # The website (apps/web) deploys itself through Cloudflare Workers Builds on every push to main.
+      - name: Roll back to the version that was live before
+        if: failure() && steps.live.outputs.version != ''
+        working-directory: apps/api
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          VERSION: ${{ steps.live.outputs.version }}
+        run: bunx cf workers deployments create --worker openskatemap-api --strategy percentage --versions "[{\"version_id\":\"$VERSION\",\"percentage\":100}]"

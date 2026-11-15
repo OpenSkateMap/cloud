@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "skills": {
+    "astro": {
+      "source": "astrolicious/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/astro/SKILL.md",
+      "computedHash": "ebefe26b231d32379c14e41a46c2de7b4b0184543bedab7febdabe4fb21fba4e"
+    },
+    "better-auth-best-practices": {
+      "source": "better-auth/skills",
+      "sourceType": "github",
+      "skillPath": "better-auth/best-practices/SKILL.md",
+      "computedHash": "0c30be0e118c2b7a0c4c57bd9e63bf110c7e420a79ec6ce7997153f3b1e066ee"
+    },
+    "better-auth-security-best-practices": {
+      "source": "better-auth/skills",
+      "sourceType": "github",
+      "skillPath": "security/SKILL.md",
+      "computedHash": "7a230edf3a24ce18162cb4379f59b6a19b8d24ca04db530609d0f15cede556dc"
+    },
+    "buzzkit": {
+      "source": "buzzkit.dev",
+      "sourceUrl": "https://buzzkit.dev",
+      "sourceType": "well-known",
+      "computedHash": "656858551347d836c25c2605a2366951daacf6a4cbe3fd33d7f28a5b26eee9f9",
+      "wellKnownDigest": "sha256:c841b32d75924311412815dfb857fce55e92d6ca0efb80f2601bb7ba892bd3dc"
+    },
+    "create-auth": {
+      "source": "better-auth/skills",
+      "sourceType": "github",
+      "skillPath": "better-auth/create-auth/SKILL.md",
+      "computedHash": "9a9b498bc144367b8e237233f89def63fb2bd69e8cafe173eaa58fe3a863cdc4"
+    },
+    "hono": {
+      "source": "honojs/skills",
+      "sourceType": "github",
+      "skillPath": "skills/hono/SKILL.md",
+      "computedHash": "61fedce9caced4beef38fa2132e00b77976cfd4956f175c79bb05baead2e5b7c"
+    },
+    "motion": {
+      "source": "motiondivision/ai-kit",
+      "sourceType": "github",
+      "skillPath": "plugins/motion/skills/motion/SKILL.md",
+      "computedHash": "bb15ae95c3318851fa0b517f946d97401bbee1b2efa4a58db8bb0cce7f2d3e64"
+    },
+    "planetscale-postgres-safety-review": {
+      "source": "planetscale/skills",
+      "sourceType": "github",
+      "skillPath": "planetscale-postgres-safety-review/SKILL.md",
+      "computedHash": "cc92e5679649c39ff41da67b2d3cbb1c5036cd64756df8a1eb1ec95a136c0995"
+    },
+    "planetscale-pscale-cli-automation": {
+      "source": "planetscale/skills",
+      "sourceType": "github",
+      "skillPath": "planetscale-pscale-cli-automation/SKILL.md",
+      "computedHash": "de929eee15e6a6286e53c0b154a87e7d241156e3f852a1f6bb8b421ee43b9382"
+    }
+  }
+}

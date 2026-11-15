@@ -1,0 +1,2 @@
+ALTER TABLE "collection_invite" ADD COLUMN "declined_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "collection_invite" ADD CONSTRAINT "collection_invite_declined" CHECK ("collection_invite"."declined_at" is null or ("collection_invite"."email_hash" is not null and "collection_invite"."user_id" is null));

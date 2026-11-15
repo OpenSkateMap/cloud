@@ -1,0 +1,5 @@
+{
+  "extends": "astro/tsconfigs/strictest",
+  "compilerOptions": { "types": ["astro/client"], "verbatimModuleSyntax": true },
+  "include": ["./**/*", "./.astro/types.d.ts"], "exclude": ["node_modules"]
+}

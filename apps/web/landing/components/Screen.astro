@@ -1,0 +1,19 @@
+---
+import { Image } from "astro:assets";
+import type { ImageMetadata } from "astro";
+import bezel from "../assets/apple/iphone-black.webp";
+
+// `sizes` is the phone's rendered width in CSS pixels at each breakpoint (height × 1000 / 2041).
+type Props = { src: ImageMetadata; alt: string; class?: string; eager?: boolean; sizes?: string };
+const { src, alt, class: className, eager = false, sizes = "(max-width: 900px) 216px, 206px" } = Astro.props;
+const widths = [220, 330, 360, 440, 660, 880];
+// The screenshot is drawn at 89.8% of the bezel (`.screen-shot`), so it asks for that much less.
+const shotSizes = sizes.replace(/(\d+)px(?=,|$)/g, (_, width: string) => `${Math.round(Number(width) * 0.898)}px`);
+const loading = eager ? "eager" : "lazy";
+const decoding = eager ? "sync" : "async";
+---
+
+<figure class:list={["screen", className]}>
+  <Image class="screen-shot" src={src} alt={alt} widths={widths} sizes={shotSizes} quality={72} loading={loading} decoding={decoding} fetchpriority={eager ? "high" : "auto"} draggable="false" />
+  <Image class="screen-bezel" src={bezel} alt="" widths={widths} sizes={sizes} loading={loading} decoding={decoding} fetchpriority={eager ? "high" : "auto"} draggable="false" />
+</figure>

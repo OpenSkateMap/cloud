@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import jpeg from "jpeg-js";
 import { createHash } from "node:crypto";
 import { pageStylesheet } from "../site/layout.ts";
 import { buildPages, documentMarkdown } from "../site/pages.ts";
+import { imageSize } from "./image-size.ts";
 
 const landing = `<!doctype html><html lang="en"><head><title>OpenSkateMap</title></head><body><a href="/terms">Terms</a> <a href="/privacy">Privacy</a></body></html>`;
 
@@ -23,13 +23,11 @@ describe("buildPages", () => {
     expect(cards.map((file) => file.replace(/\.[0-9a-f]{10}\.jpg$/, "")).sort()).toEqual(
       ["cards/home", "cards/privacy", "cards/spot", "cards/support", "cards/terms"],
     );
-    expect(files.filter((file) => file.startsWith("cards/spot/")).sort()).toEqual(
-      ["cards/spot/diy.jpg", "cards/spot/frame.png", "cards/spot/grain.png", "cards/spot/park.jpg", "cards/spot/plaza.jpg", "cards/spot/street.jpg"],
-    );
+    expect(files.filter((file) => file.startsWith("cards/spot/")).sort()).toEqual(["cards/spot/base.jpg", "cards/spot/frame.png", "cards/spot/pill.png"]);
     expect(files.filter((file) => !file.startsWith("cards/")).sort()).toEqual(
       [
-        "fonts/MonaSans-Medium.ttf",
-        "fonts/MonaSansDisplayCondensed-Black.ttf",
+        "fonts/InterDisplay-Bold.ttf",
+        "fonts/InterDisplay-Regular.ttf",
         "fonts/OFL.txt",
         "404.html",
         "_headers",
@@ -106,9 +104,9 @@ describe("buildPages", () => {
       const html = await read(page);
       const image = html.match(/<meta property="og:image" content="https:\/\/openskatemap\.app\/(cards\/[^"]+)">/)?.[1];
       expect(image).toMatch(new RegExp(`^cards/${card}\\.[0-9a-f]{10}\\.jpg$`));
-      const bytes = await readFile(path.join(directory, image ?? ""));
-      expect(bytes.length).toBeLessThan(300_000);
-      const { width, height } = jpeg.decode(bytes, { useTArray: true });
+      const file = path.join(directory, image ?? "");
+      expect((await readFile(file)).length).toBeLessThan(300_000);
+      const { width, height } = await imageSize(file);
       expect(width / height).toBeCloseTo(1200 / 630, 2);
       expect(html).toContain(`<meta property="og:image:width" content="${width}">`);
       expect(html).toContain(`<meta property="og:image:height" content="${height}">`);

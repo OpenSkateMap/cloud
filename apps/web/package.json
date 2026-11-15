@@ -11,11 +11,8 @@
     "test": "bun test ./test"
   },
   "devDependencies": {
-    "@resvg/resvg-js": "^2.6.2",
     "@types/bun": "^1.4.2",
-    "jpeg-js": "^0.4.4",
     "marked": "^18.0.14",
-    "satori": "^0.35.0",
     "wrangler": "4.162.0"
   },
   "dependencies": {

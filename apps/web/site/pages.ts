@@ -1,20 +1,11 @@
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { marked } from "marked";
-import { type Card, renderCard, renderSpotCardParts, sharedCard } from "./cards.ts";
+import { cardAlt, sharedCard, spotCardPartFiles, spotShareCard } from "./cards.ts";
 import { cardFonts } from "./fonts.ts";
 import { landingPolicy, layout, securityHeaders, shareTags } from "./layout.ts";
 import { documents } from "./documents.ts";
 import { contactText, site } from "./site.ts";
-
-const cards = {
-  spot: {
-    name: "spot",
-    lines: ["A skater sent", "you a spot"],
-    note: "Open the link on an iPhone with OpenSkateMap",
-    action: "See the spot",
-  },
-} as const satisfies Record<string, Card>;
 
 const contentDirectory = path.join(import.meta.dirname, "../content");
 const fontDirectory = path.join(import.meta.dirname, "../fonts");
@@ -56,10 +47,10 @@ export async function buildPages(directory: string, options: { home: string; con
   await mkdir(path.join(directory, "cards/spot"), { recursive: true });
   await mkdir(path.join(directory, "fonts"), { recursive: true });
   const [home, spot, texts, spotCardParts] = await Promise.all([
-    sharedCard("home", `${site.name}: All over town. The street spots in your city on one map, with photo pins and curators' notes.`, { width: 1800, height: 945 }),
-    renderCard(cards.spot),
-    Promise.all(documents.map(async (document) => ({ ...document, card: await renderCard({ name: document.slug, ...document.card }) }))),
-    renderSpotCardParts(),
+    sharedCard("home", `${site.name}: All over town. The street spots in your city on one map, with photo pins and curators' notes.`),
+    sharedCard(spotShareCard.name, cardAlt(spotShareCard)),
+    Promise.all(documents.map(async (document) => ({ ...document, card: await sharedCard(document.slug, cardAlt(document)) }))),
+    Promise.all(spotCardPartFiles.map(async ({ part, source }) => [part, new Uint8Array(await readFile(source))] as const)),
   ]);
   // One text for agents: llms.txt, and the home page's Markdown twin.
   const llms = `# ${site.name}
@@ -164,7 +155,7 @@ ${headerLines(securityHeaders())}
 /fonts/*
   Cache-Control: public, max-age=604800
 `,
-    ...spotCardParts,
+    ...Object.fromEntries(spotCardParts),
   };
   for (const card of [home, spot, ...texts.map((document) => document.card)]) {
     files[card.file] = card.bytes;

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import config from "../wrangler.jsonc";
+import { kindColors, layOutSpotCard, spotCardTile } from "../site/spot-card-layout.ts";
 import { analyticsPath, cardImagePath, checkAPIHealth, createHandler, markdownTwins, type SpotCard, type WorkerEnv } from "../src/index.ts";
 
 const card: SpotCard = {
@@ -11,27 +12,38 @@ const card: SpotCard = {
   version: 42,
 };
 
-type Draw = { kind: "image" | "text"; label: string; options: ImageDrawOptions | undefined };
+type Draw = { kind: "image" | "text"; label: string; transforms: ImageTransform[]; options: ImageDrawOptions | undefined };
+
+type FakeTransformer = ImageTransformer & { label: string; transforms: ImageTransform[] };
 
 function fakes(cards: Record<string, SpotCard | "error">) {
   const apiCalls: Request[] = [];
   const draws: Draw[] = [];
   const texts: { content: string; options: TextOptions }[] = [];
-  const transformer = (label: string): ImageTransformer & { label: string } => ({
+  const outputs: string[] = [];
+  // Each stream the Worker hands to Images, named by where it came from: an asset's path, or "cover".
+  const streams = new WeakMap<ReadableStream, string>();
+  const named = (response: Response, label: string) => (response.body && streams.set(response.body, label), response);
+  const transformer = (label: string, transforms: ImageTransform[] = []): FakeTransformer => ({
     label,
-    transform: () => transformer(label),
+    transforms,
+    transform: (transform) => transformer(label, [...transforms, transform]),
     draw(image, options) {
-      draws.push({ kind: "label" in image && String(image.label).startsWith("text:") ? "text" : "image", label: "label" in image ? String(image.label) : "stream", options });
-      return transformer(label);
+      const drawn = "label" in image ? (image as FakeTransformer) : transformer("stream");
+      draws.push({ kind: drawn.label.startsWith("text:") ? "text" : "image", label: drawn.label, transforms: drawn.transforms, options });
+      return transformer(label, transforms);
     },
-    output: async () => ({
-      response: (options) => new Response("jpeg", { headers: { "Content-Type": "image/jpeg", ...Object.fromEntries(new Headers(options?.headers)) } }),
-      contentType: () => "image/jpeg",
-      image: () => new Response("jpeg").body!,
-    }),
+    output: async () => {
+      outputs.push(label);
+      return {
+        response: (options) => new Response("jpeg", { headers: { "Content-Type": "image/jpeg", ...Object.fromEntries(new Headers(options?.headers)) } }),
+        contentType: () => "image/jpeg",
+        image: () => new Response("jpeg").body!,
+      };
+    },
   });
   const env: WorkerEnv = {
-    ASSETS: { fetch: async (request) => new Response(`asset ${new URL(request.url).pathname}`) },
+    ASSETS: { fetch: async (request) => named(new Response(`asset ${new URL(request.url).pathname}`), new URL(request.url).pathname) },
     API: {
       async fetch(request) {
         apiCalls.push(request);
@@ -43,17 +55,14 @@ function fakes(cards: Record<string, SpotCard | "error">) {
       },
     },
     IMAGES: {
-      input: (stream) => {
-        void stream;
-        return transformer("input");
-      },
+      input: (stream) => transformer(stream instanceof ReadableStream ? (streams.get(stream) ?? "stream") : "stream"),
       text: (content, options) => {
         texts.push({ content, options });
         return transformer(`text:${content}`);
       },
     },
   };
-  return { env, apiCalls, draws, texts };
+  return { env, apiCalls, draws, texts, outputs, named };
 }
 
 const memoryCache = () => {
@@ -119,7 +128,7 @@ describe("the site's Worker", () => {
     expect(response.status).toBe(200);
     expect(html).toContain('<meta property="og:title" content="Southbank Undercroft on OpenSkateMap">');
     expect(html).toContain('<meta property="og:description" content="Plaza in London, shared on OpenSkateMap.">');
-    expect(html).toContain(`<meta property="og:image" content="https://openskatemap.app/cards/spots/${card.id}/42-1.jpg">`);
+    expect(html).toContain(`<meta property="og:image" content="https://openskatemap.app/cards/spots/${card.id}/42-2.jpg">`);
     expect(html).toContain(`<meta property="og:url" content="https://openskatemap.app/spots/${card.id}">`);
     expect(html).toContain('<meta name="twitter:card" content="summary_large_image">');
     expect(html).toContain('<meta name="robots" content="noindex">');
@@ -176,47 +185,71 @@ describe("the site's Worker", () => {
     expect(cache.entries.size).toBe(0);
   });
 
-  test("a card is composed from the cover, the parts and the text, images before text, and cached", async () => {
-    const { env, draws, texts, apiCalls } = fakes({ [card.id]: card });
+  test("a card is the base, the cover cropped to the tile, the frame that rounds it, the pill, then the text, and cached", async () => {
+    const { env, draws, texts, outputs, apiCalls, named } = fakes({ [card.id]: card });
     const photos: string[] = [];
     const cache = memoryCache();
-    const handle = createHandler({ cache, fetchPhoto: async (url) => (photos.push(url), new Response("cover")) });
+    const handle = createHandler({ cache, fetchPhoto: async (url) => (photos.push(url), named(new Response("cover"), "cover")) });
     const ctx = context();
     const response = await handle(new Request(`https://openskatemap.app${cardImagePath(card)}`), env, ctx);
     await ctx.settle();
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("public, max-age=86400");
     expect(photos).toEqual(["https://images.openskatemap.app/photos/cover.jpg"]);
+    expect(outputs).toEqual(["/cards/spot/base.jpg"]);
+    const { cover } = spotCardTile;
+    const layout = layOutSpotCard({ name: card.title, kind: card.kind, city: card.city });
+    expect(draws.filter((draw) => draw.kind === "image").map(({ label, transforms, options }) => ({ label, transforms, options }))).toEqual([
+      { label: "cover", transforms: [{ width: cover.size, height: cover.size, fit: "cover", gravity: "auto" }], options: { left: cover.left, top: cover.top } },
+      { label: "/cards/spot/frame.png", transforms: [], options: { left: spotCardTile.left, top: spotCardTile.top } },
+      { label: "/cards/spot/pill.png", transforms: [], options: layout.pill },
+    ]);
     const kinds = draws.map((draw) => draw.kind);
     expect(kinds.indexOf("text")).toBeGreaterThan(kinds.lastIndexOf("image"));
-    expect(draws[0]?.options?.repeat).toBe(true);
-    expect(texts.map((text) => text.content)).toEqual(["SOUTHBANK", "UNDERCROFT", "Plaza · London"]);
+    expect(texts.map((text) => [text.content, text.options.color])).toEqual([
+      ["Southbank", "#000000"],
+      ["Undercroft", "#000000"],
+      ["Plaza · London", "#555555"],
+    ]);
     expect(new Set(texts.map((text) => text.options.font.url))).toEqual(
-      new Set(["https://openskatemap.app/fonts/MonaSansDisplayCondensed-Black.ttf", "https://openskatemap.app/fonts/MonaSans-Medium.ttf"]),
+      new Set(["https://openskatemap.app/fonts/InterDisplay-Bold.ttf", "https://openskatemap.app/fonts/InterDisplay-Regular.ttf"]),
     );
     await handle(new Request(`https://openskatemap.app${cardImagePath(card)}`), env, context());
     expect(apiCalls).toHaveLength(1);
   });
 
-  test("an old card URL points at the spot's current card; a removed spot's card is gone", async () => {
+  test("a card draws with the fonts its own deployment serves", async () => {
+    const { env, texts } = fakes({ [card.id]: card });
+    await createHandler({ fetchPhoto: async () => new Response("cover") })(new Request(`https://preview.example.workers.dev${cardImagePath(card)}`), env, context());
+    expect(texts.every((text) => text.options.font.url.startsWith("https://preview.example.workers.dev/fonts/"))).toBe(true);
+  });
+
+  test("an old card URL points at the spot's current card, an old design's too; a removed spot's card is gone", async () => {
     const { env } = fakes({ [card.id]: card });
-    const old = await createHandler()(new Request(`https://openskatemap.app/cards/spots/${card.id}/41-1.jpg`), env, context());
-    expect(old.status).toBe(301);
-    expect(old.headers.get("location")).toBe(cardImagePath(card));
-    const gone = await createHandler()(new Request("https://openskatemap.app/cards/spots/gone/3-1.jpg"), env, context());
+    for (const old of [`/cards/spots/${card.id}/41-2.jpg`, `/cards/spots/${card.id}/42-1.jpg`]) {
+      const response = await createHandler()(new Request(`https://openskatemap.app${old}`), env, context());
+      expect(response.status).toBe(301);
+      expect(response.headers.get("location")).toBe(cardImagePath(card));
+    }
+    const gone = await createHandler()(new Request("https://openskatemap.app/cards/spots/gone/3-2.jpg"), env, context());
     expect(gone.status).toBe(404);
   });
 
-  test("a spot without a cover gets its kind's background", async () => {
-    const { env, draws } = fakes({ bare: { ...card, id: "bare", cover: null, city: null } });
+  test("a spot without a cover fills the tile with its kind's colour", async () => {
+    const bare = { ...card, id: "bare", cover: null, city: null };
+    const { env, draws } = fakes({ bare });
     const photos: string[] = [];
     const response = await createHandler({ fetchPhoto: async (url) => (photos.push(url), new Response("cover")) })(
-      new Request("https://openskatemap.app/cards/spots/bare/42-1.jpg"),
+      new Request(`https://openskatemap.app${cardImagePath(bare)}`),
       env,
       context(),
     );
     expect(response.status).toBe(200);
     expect(photos).toEqual([]);
+    expect(draws.filter((draw) => draw.kind === "image").map(({ label, transforms }) => ({ label, transforms }))).toEqual([
+      { label: "/cards/spot/frame.png", transforms: [{ background: kindColors.plaza }] },
+      { label: "/cards/spot/pill.png", transforms: [] },
+    ]);
     expect(draws.filter((draw) => draw.kind === "text").at(-1)?.label).toBe("text:Plaza");
   });
 

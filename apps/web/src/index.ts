@@ -116,7 +116,8 @@ async function respondToCard(env: WorkerEnv, request: Request, url: URL, id: str
   try {
     const image = await composeSpotCard(
       { name: card.title, kind: card.kind, city: card.city },
-      { images: env.IMAGES, cover, part, fontURL: (font) => `${site.origin}/fonts/${cardFonts[font]}` },
+      // Images fetches fonts by URL; this deployment's own origin, so a preview draws with the fonts it ships.
+      { images: env.IMAGES, cover, part, fontURL: (font) => new URL(`/fonts/${cardFonts[font]}`, url).href },
     );
     return image.response({ headers: { "Cache-Control": cacheControl, "X-Robots-Tag": "noindex" } });
   } catch (error) {

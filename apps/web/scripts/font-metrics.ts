@@ -5,6 +5,8 @@ import { cardFonts } from "../site/fonts.ts";
 const ranges: [number, number][] = [
   [0x20, 0x7e],
   [0xa0, 0x24f],
+  [0x370, 0x3ff],
+  [0x400, 0x4ff],
   [0x2010, 0x2027],
 ];
 

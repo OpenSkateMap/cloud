@@ -1,6 +1,4 @@
 export const cardFonts = {
-  display: "MonaSansDisplayCondensed-Black.ttf",
-  text: "MonaSans-Medium.ttf",
+  display: "InterDisplay-Bold.ttf",
+  text: "InterDisplay-Regular.ttf",
 } as const;
-
-export type CardFont = keyof typeof cardFonts;

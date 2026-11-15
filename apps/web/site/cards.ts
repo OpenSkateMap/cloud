@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { documents } from "./documents.ts";
 import { site } from "./site.ts";
-import { spotCardParts } from "./spot-card-layout.ts";
+import { spotCardParts, spotKinds } from "./spot-card-layout.ts";
 
 export type RenderedCard = { file: string; url: string; alt: string; bytes: Uint8Array; width: number; height: number };
 
@@ -31,4 +31,7 @@ export async function sharedCard(name: string, alt: string): Promise<RenderedCar
 export const cardAlt = (card: Pick<ShareCard, "title" | "note">) => `${site.name}: ${sentence(card.title)} ${sentence(card.note)}`;
 
 /** The spot card's parts, rendered with the share images and composed by the Worker (src/spot-card.ts). */
-export const spotCardPartFiles = Object.values(spotCardParts).map((part) => ({ part, source: path.join(shareDirectory, "spot-card", path.basename(part)) }));
+export const spotCardPartFiles = [spotCardParts.base, spotCardParts.frame, spotCardParts.pill, ...spotKinds.map(spotCardParts.empty)].map((part) => ({
+  part,
+  source: path.join(shareDirectory, "spot-card", path.basename(part)),
+}));

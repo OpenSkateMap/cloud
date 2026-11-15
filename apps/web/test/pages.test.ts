@@ -23,7 +23,15 @@ describe("buildPages", () => {
     expect(cards.map((file) => file.replace(/\.[0-9a-f]{10}\.jpg$/, "")).sort()).toEqual(
       ["cards/home", "cards/privacy", "cards/spot", "cards/support", "cards/terms"],
     );
-    expect(files.filter((file) => file.startsWith("cards/spot/")).sort()).toEqual(["cards/spot/base.jpg", "cards/spot/frame.png", "cards/spot/pill.png"]);
+    expect(files.filter((file) => file.startsWith("cards/spot/")).sort()).toEqual([
+      "cards/spot/base.jpg",
+      "cards/spot/empty-diy.png",
+      "cards/spot/empty-park.png",
+      "cards/spot/empty-plaza.png",
+      "cards/spot/empty-street.png",
+      "cards/spot/frame.png",
+      "cards/spot/pill.png",
+    ]);
     expect(files.filter((file) => !file.startsWith("cards/")).sort()).toEqual(
       [
         "fonts/InterDisplay-Bold.ttf",

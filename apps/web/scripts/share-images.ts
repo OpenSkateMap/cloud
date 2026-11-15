@@ -8,7 +8,7 @@ import path from "node:path";
 import { type ShareCard, sentence, shareCards, shareDirectory } from "../site/cards.ts";
 import { escapeHTML } from "../site/layout.ts";
 import { site } from "../site/site.ts";
-import { spotCardBrand, spotCardColumn, spotCardParts, spotCardSize as size, spotCardTile } from "../site/spot-card-layout.ts";
+import { kindColors, spotCardBrand, spotCardColumn, spotCardParts, spotCardSize as size, spotCardTile, spotKinds } from "../site/spot-card-layout.ts";
 
 const root = path.join(import.meta.dirname, "..");
 const landingBuild = path.join(root, ".site");
@@ -88,6 +88,11 @@ const spotParts = {
     `<div class="pill">${pill.text}</div>`,
     "transparent",
   ),
+  empty: (color: string) =>
+    card(
+      `.empty { position: absolute; left: ${spotCardTile.cover.left}px; top: ${spotCardTile.cover.top}px; width: ${spotCardTile.cover.size}px; height: ${spotCardTile.cover.size}px; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, ${color} 16%, #fff); }`,
+      `<div class="empty"><svg width="64" height="112" viewBox="-33 -33 66 116" aria-hidden="true"><path fill="${color}" fill-rule="evenodd" stroke="${color}" stroke-width="6" stroke-linejoin="round" d="M-27.81 11.25A30 30 0 1 1 27.81 11.25L0 80Z M13 0A13 13 0 1 0 -13 0A13 13 0 1 0 13 0Z"/></svg></div>`,
+    ),
 };
 
 type Shot = {
@@ -127,6 +132,14 @@ const shots: Shot[] = [
     crop: { ...pillAt, width: pill.width, height: pill.height },
     outputs: [partOutput(spotCardParts.pill)],
   },
+  ...spotKinds.map((kind) => ({
+    name: `spot-empty-${kind}`,
+    page: () => spotParts.empty(kindColors[kind]),
+    scale: 1,
+    format: "png" as const,
+    crop: { left: spotCardTile.cover.left, top: spotCardTile.cover.top, width: spotCardTile.cover.size, height: spotCardTile.cover.size },
+    outputs: [partOutput(spotCardParts.empty(kind))],
+  })),
 ];
 
 const server = Bun.serve({

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import config from "../wrangler.jsonc";
-import { kindColors, layOutSpotCard, spotCardTile } from "../site/spot-card-layout.ts";
+import { layOutSpotCard, spotCardTile } from "../site/spot-card-layout.ts";
 import { analyticsPath, cardImagePath, checkAPIHealth, createHandler, markdownTwins, type SpotCard, type WorkerEnv } from "../src/index.ts";
 
 const card: SpotCard = {
@@ -235,7 +235,7 @@ describe("the site's Worker", () => {
     expect(gone.status).toBe(404);
   });
 
-  test("a spot without a cover fills the tile with its kind's colour", async () => {
+  test("a spot without a cover gets its kind's empty tile in the cover's place, rounded by the same frame", async () => {
     const bare = { ...card, id: "bare", cover: null, city: null };
     const { env, draws } = fakes({ bare });
     const photos: string[] = [];
@@ -246,9 +246,11 @@ describe("the site's Worker", () => {
     );
     expect(response.status).toBe(200);
     expect(photos).toEqual([]);
-    expect(draws.filter((draw) => draw.kind === "image").map(({ label, transforms }) => ({ label, transforms }))).toEqual([
-      { label: "/cards/spot/frame.png", transforms: [{ background: kindColors.plaza }] },
-      { label: "/cards/spot/pill.png", transforms: [] },
+    const { cover } = spotCardTile;
+    expect(draws.filter((draw) => draw.kind === "image").map(({ label, transforms, options }) => ({ label, transforms, options }))).toEqual([
+      { label: "/cards/spot/empty-plaza.png", transforms: [], options: { left: cover.left, top: cover.top } },
+      { label: "/cards/spot/frame.png", transforms: [], options: { left: spotCardTile.left, top: spotCardTile.top } },
+      { label: "/cards/spot/pill.png", transforms: [], options: layOutSpotCard({ name: bare.title, kind: bare.kind, city: bare.city }).pill },
     ]);
     expect(draws.filter((draw) => draw.kind === "text").at(-1)?.label).toBe("text:Plaza");
   });

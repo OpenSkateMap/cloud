@@ -20,6 +20,7 @@ describe("spot card layout", () => {
       [spotCardParts.base]: spotCardSize,
       [spotCardParts.frame]: { width: spotCardTile.size, height: spotCardTile.size },
       [spotCardParts.pill]: { width: spotCardColumn.pill.width, height: spotCardColumn.pill.height },
+      ...Object.fromEntries(spotKinds.map((kind) => [spotCardParts.empty(kind), { width: spotCardTile.cover.size, height: spotCardTile.cover.size }])),
     });
   });
 

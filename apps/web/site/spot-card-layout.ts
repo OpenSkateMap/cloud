@@ -14,6 +14,8 @@ export const spotCardParts = {
   base: "cards/spot/base.jpg",
   frame: "cards/spot/frame.png",
   pill: "cards/spot/pill.png",
+  /** What fills the tile when a spot has no cover: a light tint of its kind's colour with a pin. */
+  empty: (kind: SpotKind) => `cards/spot/empty-${kind}.png`,
 } as const;
 
 /** The cover's rounded tile, right of the text: the frame part covers `left, top, size`, the cover fills the inside of the border. */

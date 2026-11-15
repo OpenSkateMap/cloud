@@ -27,7 +27,7 @@ through Hyperdrive, R2 for photos. The iOS app's client is generated from `apps/
   `/fonts/*` because Images loads fonts by URL. Pages are cached 5 minutes and cards a day (Cache API; the URL already carries the version and design). A spot the
   API doesn't know (removed, unknown, or the API unreachable) gets the generic `spot.html`. The Worker does layout
   only; Images does the pixels (written when the account was on Workers Free; it's on Workers Paid since 2026-10-13).
-- `apps/web/scripts/share-images.ts` — renders the home page's share image (`apps/web/site/share/home.jpg`, 1800 × 945: 1.5× keeps it under WhatsApp's ~300 KB preview limit) and the READMEs' header (`.github/assets/hero.jpg`; pass the iOS repo's path as an extra output) from the built landing page in headless Chrome, with a few CSS overrides per image. Run `bun run build` first, then the script, and commit both images.
+- `apps/web/scripts/share-images.ts` — renders the home page's share image (`apps/web/site/share/home.jpg`, 1800 × 945: 1.5× keeps it under WhatsApp's ~300 KB preview limit) and the READMEs' header (`.github/assets/hero.jpg`; pass the iOS repo's path as an extra output) from the built landing page in headless Chrome, as one composition (the hero without its badges, notes placed clear of the spots). Run `bun run build` first, then the script, and commit both images.
 - `packages/db` — Drizzle schema, SQL migrations, the connection helper, the migration runner.
 - `docker-compose.yml` — local Postgres 18 + PostGIS 3.6 on port 54330 (project name `openskatemap`).
 

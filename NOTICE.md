@@ -30,8 +30,8 @@ The `credits.json` in each folder holds the same records.
 
 | What | Terms |
 |---|---|
-| `icons/testflight.png`, and in `.github/assets/hero.jpg` | The TestFlight icon, a trademark of Apple Inc. |
-| The GitHub mark in `.github/assets/hero.jpg` and on the landing page | A trademark of GitHub, Inc. |
+| `icons/testflight.png` | The TestFlight icon, a trademark of Apple Inc. |
+| The GitHub mark on the landing page | A trademark of GitHub, Inc. |
 | `apple/iphone-black.webp` | The iPhone bezel from Apple Design Resources, used under Apple's License Agreement for Apple Design Resources |
 | `videos/*.jpg` | YouTube thumbnails of [Ace Trucks: Turn Right](https://www.youtube.com/watch?v=mZEVi6EvJPc) and [Lucien Genand: Boardslide Hood](https://www.youtube.com/watch?v=fQ0Il9tOfsA), © their owners |
 | Mona Sans (`apps/web/fonts`) | © GitHub, under the [SIL Open Font License 1.1](apps/web/fonts/OFL.txt) |

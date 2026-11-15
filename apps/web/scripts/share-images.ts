@@ -16,36 +16,31 @@ const still = `body > header, .nav-links, .tf-small { display: none !important; 
 .lede .more { display: none; }
 .lede { max-width: 640px; margin-inline: auto; }`;
 
-const images = [
-  {
-    name: "share",
-    size: { width: 1200, height: 630 },
-    // 1.5×, not 2×: WhatsApp drops link previews over ~300 KB.
-    scale: 1.5,
-    quality: 80,
-    outputs: [path.join(root, "site/share/home.jpg")],
-    css: `.badges, .stage-note:nth-of-type(3) { display: none !important; }
+// One composition for both: the hero's headline and lede, its four spots, the phone and two notes placed clear of them.
+const composition = `.badges, .stage-note:nth-of-type(3) { display: none !important; }
 .hero { padding-top: 64px !important; }
 .hero h1 { font-size: 72px !important; }
 .stage { margin-top: 28px !important; }
 .stage-note:nth-of-type(1) { top: 196px !important; }
-.stage-note:nth-of-type(2) { top: 276px !important; }`,
+.stage-note:nth-of-type(2) { top: 276px !important; }`;
+
+const images = [
+  {
+    name: "share",
+    // 1.5×, not 2×: WhatsApp drops link previews over ~300 KB.
+    scale: 1.5,
+    quality: 80,
+    outputs: [path.join(root, "site/share/home.jpg")],
   },
   {
     name: "readme",
-    size: { width: 1200, height: 600 },
     scale: 2,
     quality: 82,
     outputs: [path.join(root, "../../.github/assets/hero.jpg"), ...process.argv.slice(2)],
-    css: `.hp-2, .hp-4, .stage-note:nth-of-type(3) { display: none !important; }
-.hero { padding-top: 30px !important; }
-.hero h1 { font-size: 76px !important; }
-.badges { margin-top: 20px !important; }
-.stage { margin-top: 30px !important; }
-.stage-note:nth-of-type(1) { top: 40px !important; }
-.stage-note:nth-of-type(2) { top: 120px !important; }`,
   },
 ] as const;
+
+const size = { width: 1200, height: 630 };
 
 const home = await readFile(path.join(pages, "index.html"), "utf8").catch(() => {
   throw new Error("No built site: run `bun run build` first");
@@ -62,7 +57,7 @@ const server = Bun.serve({
   async fetch(request) {
     const { pathname } = new URL(request.url);
     const image = images.find((candidate) => pathname === `/__${candidate.name}`);
-    if (image) return new Response(page(image.css), { headers: { "Content-Type": "text/html; charset=utf-8" } });
+    if (image) return new Response(page(composition), { headers: { "Content-Type": "text/html; charset=utf-8" } });
     const file = Bun.file(path.join(pages, pathname.endsWith("/") ? `${pathname}index.html` : pathname));
     return (await file.exists()) ? new Response(file) : new Response("Not found", { status: 404 });
   },
@@ -77,7 +72,7 @@ try {
       chrome,
       "--headless",
       "--hide-scrollbars",
-      `--window-size=${image.size.width},${image.size.height}`,
+      `--window-size=${size.width},${size.height}`,
       `--force-device-scale-factor=${image.scale}`,
       "--virtual-time-budget=5000",
       `--screenshot=${png}`,

@@ -24,8 +24,20 @@ describe("spot card layout", () => {
   });
 
   test("the model predicts the boxes Cloudflare Images draws", () => {
-    // Measured from Images' `.text()` output (PNG width × height) on 2026-11-16; kerning-free strings.
-    const measured: [font: "display" | "text", text: string, size: number, width: number, height: number][] = [];
+    // Measured from Images' `.text()` output (PNG width × height) on 2026-11-15; kerning-free strings. Images sets
+    // Inter at its advances; kerned pairs only come out narrower than the model, so fitted text still fits.
+    const measured: [font: "display" | "text", text: string, size: number, width: number, height: number][] = [
+      ["display", "HHHHHHHH", 84, 474, 61],
+      ["display", "HHHHHHHH", 168, 948, 123],
+      ["display", "Hg", 168, 204, 157],
+      ["display", "ÄH", 168, 232, 160],
+      ["display", "H H", 168, 260, 123],
+      ["display", "H,", 168, 145, 148],
+      ["display", "Площадь", 84, 370, 75],
+      ["text", "Plaza · London", 34, 212, 25],
+      ["text", "Street · Copenhagen", 34, 302, 32],
+      ["text", "HHHHHHHH", 68, 377, 50],
+    ];
     for (const [font, text, size, expectedWidth, expectedHeight] of measured) {
       const ink = measure(font, text, size);
       expect(Math.abs(ink.right - ink.left - expectedWidth)).toBeLessThanOrEqual(2.5);

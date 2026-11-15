@@ -33,15 +33,12 @@ export const spotCardBrand = { left: 80, top: 64 } as const;
 /** The text column: the name, "Kind · City", then the pill part, centred as one block. */
 export const spotCardColumn = { left: 80, width: 600, titleGap: 22, pillGap: 40, pill: { text: "See the spot", width: 188, height: 60 } } as const;
 
-/** Images sets text slightly looser than the font's advances: measured at 0.0145 em per glyph (see the tests). */
-const tracking = 0.0145;
-
 const titleSizes = { largest: 84, smallest: 52, step: 4 } as const;
 const titleLeading = 1.02;
 const titleClearance = 0.04;
 const noteSize = 34;
 
-type Ink = { left: number; right: number; top: number; bottom: number; advance: number };
+type Ink = { left: number; right: number; top: number; bottom: number };
 
 export function measure(font: FontName, text: string, size: number): Ink {
   const { unitsPerEm, glyphs } = fontMetrics[font];
@@ -56,10 +53,9 @@ export function measure(font: FontName, text: string, size: number): Ink {
       ink.top = Math.max(ink.top, yMax * scale);
       ink.bottom = Math.min(ink.bottom, yMin * scale);
     }
-    pen += advance * scale + tracking * size;
+    pen += advance * scale;
   }
-  if (ink.left === Infinity) return { left: 0, right: 0, top: 0, bottom: 0, advance: pen };
-  return { ...ink, advance: pen - tracking * size };
+  return ink.left === Infinity ? { left: 0, right: 0, top: 0, bottom: 0 } : ink;
 }
 
 export const inkWidth = (font: FontName, text: string, size: number) => {

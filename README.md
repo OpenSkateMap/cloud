@@ -9,6 +9,13 @@
 </p>
 
 <p align="center">
+  <a href="https://openskatemap.app"><img alt="Website: openskatemap.app" src="https://img.shields.io/badge/Website-openskatemap.app-000000"></a>
+  <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/License-AGPL--3.0-4c9a2a"></a>
+  <a href="https://github.com/OpenSkateMap/cloud/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/OpenSkateMap/cloud/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <a href="https://workers.cloudflare.com"><img alt="Runs on Cloudflare Workers" src="https://img.shields.io/badge/Cloudflare-Workers-f38020?logo=cloudflare&amp;logoColor=white"></a>
+</p>
+
+<p align="center">
   <a href="RUNNING.md">Running it locally</a> ·
   <a href="CONTRIBUTING.md">Contributing</a> ·
   <a href="https://github.com/OpenSkateMap/ios">iOS app</a>

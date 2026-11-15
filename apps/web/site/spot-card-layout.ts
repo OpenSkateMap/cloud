@@ -6,44 +6,41 @@ export type TextRun = { font: FontName; text: string; size: number; color: strin
 
 export const spotCardSize = { width: 1200, height: 630 } as const;
 
-// Images refuses #rrggbbaa (error 9432), so the note's colour is rgba().
-export const spotCardColors = { paper: "#f4f1ea", note: "rgba(244,241,234,0.72)" } as const;
+export const spotCardColors = { ink: "#000000", note: "#555555" } as const;
 
-export const spotCardDesign = 1;
+export const spotCardDesign = 2;
 
 export const spotCardParts = {
+  base: "cards/spot/base.jpg",
   frame: "cards/spot/frame.png",
-  grain: "cards/spot/grain.png",
-  base: (kind: string) => `cards/spot/${kind}.jpg`,
+  pill: "cards/spot/pill.png",
+  /** What fills the tile when a spot has no cover: a light tint of its kind's colour with a pin. */
+  empty: (kind: SpotKind) => `cards/spot/empty-${kind}.png`,
 } as const;
 
-export const spotCardFrame = {
-  margin: 64,
-  bottom: 60,
-  pill: { text: "See the spot", fontSize: 28, lineHeight: 34, paddingX: 30, paddingY: 16 },
-  get pillWidth() {
-    return Math.ceil(measure("text", this.pill.text, this.pill.fontSize).advance) + this.pill.paddingX * 2;
-  },
-  get pillTop() {
-    return spotCardSize.height - this.bottom - this.pill.lineHeight - this.pill.paddingY * 2;
-  },
-  get pillBaseline() {
-    const { unitsPerEm, ascender, descender } = fontMetrics.text;
-    const scale = this.pill.fontSize / unitsPerEm;
-    return this.pillTop + this.pill.paddingY + (this.pill.lineHeight - (ascender - descender) * scale) / 2 + ascender * scale;
+/** The cover's rounded tile, right of the text: the frame part covers `left, top, size`, the cover fills the inside of the border. */
+export const spotCardTile = {
+  left: 690,
+  top: 105,
+  size: 420,
+  border: 10,
+  radius: 0.26,
+  get cover() {
+    return { left: this.left + this.border, top: this.top + this.border, size: this.size - this.border * 2 };
   },
 } as const;
 
-/** Images sets text slightly looser than the font's advances: measured at 0.0145 em per glyph (see the tests). */
-const tracking = 0.0145;
+export const spotCardBrand = { left: 80, top: 64 } as const;
 
-const titleSizes = { largest: 156, smallest: 100, step: 4 } as const;
-const titleLeading = 0.86;
-const titleClearance = 0.05;
-const noteSize = 30;
-const titleGap = 24;
+/** The text column: the name, "Kind · City", then the pill part, centred as one block. */
+export const spotCardColumn = { left: 80, width: 600, titleGap: 22, pillGap: 40, pill: { text: "See the spot", width: 188, height: 60 } } as const;
 
-type Ink = { left: number; right: number; top: number; bottom: number; advance: number };
+const titleSizes = { largest: 84, smallest: 52, step: 4 } as const;
+const titleLeading = 1.02;
+const titleClearance = 0.04;
+const noteSize = 34;
+
+type Ink = { left: number; right: number; top: number; bottom: number };
 
 export function measure(font: FontName, text: string, size: number): Ink {
   const { unitsPerEm, glyphs } = fontMetrics[font];
@@ -58,10 +55,9 @@ export function measure(font: FontName, text: string, size: number): Ink {
       ink.top = Math.max(ink.top, yMax * scale);
       ink.bottom = Math.min(ink.bottom, yMin * scale);
     }
-    pen += advance * scale + tracking * size;
+    pen += advance * scale;
   }
-  if (ink.left === Infinity) return { left: 0, right: 0, top: 0, bottom: 0, advance: pen };
-  return { ...ink, advance: pen - tracking * size };
+  return ink.left === Infinity ? { left: 0, right: 0, top: 0, bottom: 0 } : ink;
 }
 
 export const inkWidth = (font: FontName, text: string, size: number) => {
@@ -90,7 +86,7 @@ function truncate(font: FontName, text: string, size: number, width: number) {
 }
 
 export function fitTitle(name: string, width: number): { size: number; lines: string[] } {
-  const text = drawable("display", name.toLocaleUpperCase("en"));
+  const text = drawable("display", name);
   const words = text.split(" ");
   for (let size: number = titleSizes.largest; size >= titleSizes.smallest; size -= titleSizes.step) {
     if (inkWidth("display", text, size) <= width) return { size, lines: [text] };
@@ -119,30 +115,43 @@ export type SpotCardContent = { name: string; kind: SpotKind; city: string | nul
 
 export type SpotKind = (typeof spotKinds)[number];
 
-export function layOutSpotCard(content: SpotCardContent): TextRun[] {
-  const { width } = spotCardSize;
-  const { margin, pillWidth } = spotCardFrame;
-  const noteText = truncate("text", drawable("text", [kindTitles[content.kind], content.city].filter(Boolean).join(" · ")), noteSize, width - margin * 2 - pillWidth - 32);
-  const noteInk = measure("text", noteText, noteSize);
-  const noteBaseline = spotCardFrame.pillBaseline;
-  const title = fitTitle(content.name, width - margin * 2);
+export type SpotCardLayout = { text: TextRun[]; pill: { left: number; top: number } };
+
+/** Where a line's baseline sits in a CSS line box of `height`: the font's ascent plus half the leading. */
+function baselineIn(font: FontName, size: number, height: number) {
+  const { unitsPerEm, ascender, descender } = fontMetrics[font];
+  const scale = size / unitsPerEm;
+  return (height - (ascender - descender) * scale) / 2 + ascender * scale;
+}
+
+export function layOutSpotCard(content: SpotCardContent): SpotCardLayout {
+  const { left, width, titleGap, pillGap, pill } = spotCardColumn;
+  const title = fitTitle(content.name, width);
   const inks = title.lines.map((line) => measure("display", line, title.size));
-  const baselines = [spotCardFrame.pillTop - titleGap];
-  for (let index = inks.length - 1; index > 0; index--) {
-    const below = inks[index];
-    const above = inks[index - 1];
-    const pitch = Math.max(title.size * titleLeading, (below?.top ?? 0) - (above?.bottom ?? 0) + title.size * titleClearance);
-    baselines.unshift((baselines[0] ?? 0) - pitch);
+  const pitch = title.size * titleLeading;
+  const tops = [0];
+  for (let index = 1; index < inks.length; index++) {
+    const clear = (inks[index]?.top ?? 0) - (inks[index - 1]?.bottom ?? 0) + title.size * titleClearance;
+    tops.push((tops[index - 1] ?? 0) + Math.max(pitch, clear));
   }
-  const runs: TextRun[] = title.lines.map((line, index) => {
+  const titleHeight = (tops.at(-1) ?? 0) + pitch;
+  const { unitsPerEm, ascender, descender } = fontMetrics.text;
+  const noteHeight = ((ascender - descender) / unitsPerEm) * noteSize;
+  const top = (spotCardSize.height - (titleHeight + titleGap + noteHeight + pillGap + pill.height)) / 2;
+
+  const text: TextRun[] = title.lines.map((line, index) => {
     const ink = inks[index] ?? measure("display", line, title.size);
-    const baseline = baselines[index] ?? 0;
-    return { font: "display", text: line, size: title.size, color: spotCardColors.paper, left: Math.round(margin + ink.left), top: Math.round(baseline - ink.top) };
+    const baseline = top + (tops[index] ?? 0) + baselineIn("display", title.size, pitch);
+    return { font: "display", text: line, size: title.size, color: spotCardColors.ink, left: Math.round(left + ink.left), top: Math.round(baseline - ink.top) };
   });
+  const noteTop = top + titleHeight + titleGap;
+  const noteText = truncate("text", drawable("text", [kindTitles[content.kind], content.city].filter(Boolean).join(" · ")), noteSize, width);
   if (noteText) {
-    runs.push({ font: "text", text: noteText, size: noteSize, color: spotCardColors.note, left: Math.round(margin + noteInk.left), top: Math.round(noteBaseline - noteInk.top) });
+    const ink = measure("text", noteText, noteSize);
+    const baseline = noteTop + baselineIn("text", noteSize, noteHeight);
+    text.push({ font: "text", text: noteText, size: noteSize, color: spotCardColors.note, left: Math.round(left + ink.left), top: Math.round(baseline - ink.top) });
   }
-  return runs.filter((run) => run.text.length > 0);
+  return { text: text.filter((run) => run.text.length > 0), pill: { left, top: Math.round(noteTop + noteHeight + pillGap) } };
 }
 
 export const spotKinds = ["street", "park", "diy", "plaza"] as const;

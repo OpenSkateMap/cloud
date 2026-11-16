@@ -14,7 +14,8 @@
     "e2e": "bun test ./e2e",
     "create-city": "bun run scripts/create-city.ts",
     "seed:local": "bun run scripts/seed-local.ts",
-    "grant-editor": "bun run scripts/grant-editor.ts"
+    "grant-editor": "bun run scripts/grant-editor.ts",
+    "import-spots": "bun run scripts/import-spots.ts"
   },
   "dependencies": {
     "@hono/zod-openapi": "^1.6.0",

@@ -82,6 +82,13 @@ describe.skipIf(!e2eUrl)("clips (database)", () => {
     expect(photosBucket.objects.get(key)).toEqual({ bytes: clean, contentType: "video/mp4" });
   });
 
+  test("a clip past the API's usual body limit goes up, and a trailing box it carries is dropped", async () => {
+    const padding = 300 * 1024;
+    const padded = new Uint8Array([...clip, ...new Uint8Array([(padding >> 24) & 0xff, (padding >> 16) & 0xff, (padding >> 8) & 0xff, padding & 0xff]), ...Buffer.from("free"), ...new Uint8Array(padding - 8)]);
+    const { status, body } = await putClip(id(made.clips), rider, padded);
+    expect([status, ClipUploadSchema.parse(body.data).bytes]).toEqual([200, cleanMp4(clip)._unsafeUnwrap().bytes.length]);
+  });
+
   test("the same id again returns the stored clip; nobody else can take the id", async () => {
     const clipId = await uploadClip();
     const before = photosBucket.objects.size;

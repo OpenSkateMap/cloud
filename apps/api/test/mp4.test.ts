@@ -42,7 +42,6 @@ function chunkOffsets(bytes: Uint8Array) {
 
 const contains = (bytes: Uint8Array, text: string) => Buffer.from(bytes).includes(text);
 
-/** A copy of `bytes` with `change` applied to it. */
 function edited(bytes: Uint8Array, change: (copy: Uint8Array) => void) {
   const copy = bytes.slice();
   change(copy);

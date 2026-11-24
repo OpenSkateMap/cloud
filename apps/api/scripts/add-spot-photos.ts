@@ -81,9 +81,9 @@ type ClipCut = Awaited<ReturnType<typeof clipCut>>;
 
 const scratch = await mkdtemp(join(tmpdir(), "spot-photos-"));
 
-// H.264 High, the shorter side at most 720 px (never up) and even, about 1.8 Mbps, silent, no metadata, moov first.
 async function encodeClip({ path, start }: ClipSource, cut: ClipCut) {
   const output = join(scratch, `clip-${crypto.randomUUID()}.mp4`);
+  // The shorter side at most 720 px, never scaled up, and both sides even.
   const scale = "scale=w='if(gt(iw,ih),-2,trunc(min(720,iw)/2)*2)':h='if(gt(iw,ih),trunc(min(720,ih)/2)*2,-2)'";
   await run("ffmpeg", [
     ...["-v", "error", "-y", "-ss", String(start), "-i", path, "-map", "0:v:0", "-frames:v", String(cut.frames)],

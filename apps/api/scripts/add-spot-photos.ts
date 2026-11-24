@@ -53,16 +53,27 @@ async function thumbhashOf(path: string) {
 }
 
 const scratch = await mkdtemp(join(tmpdir(), "spot-photos-"));
+async function wrangler(args: string[], attempts = 3) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await run(WRANGLER, args);
+    } catch (error) {
+      if (attempt === attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+    }
+  }
+}
+
 const store: PhotoStore = {
   async put(key, value, options) {
     const path = join(scratch, key.replaceAll("/", "_"));
     await writeFile(path, value);
     const { contentType, cacheControl } = options.httpMetadata;
-    await run(WRANGLER, ["r2", "object", "put", `${BUCKET}/${key}`, "--file", path, "--content-type", contentType, "--cache-control", cacheControl, "--remote"]);
+    await wrangler(["r2", "object", "put", `${BUCKET}/${key}`, "--file", path, "--content-type", contentType, "--cache-control", cacheControl, "--remote"]);
     await rm(path);
   },
   async delete(key) {
-    await run(WRANGLER, ["r2", "object", "delete", `${BUCKET}/${key}`, "--remote"]);
+    await wrangler(["r2", "object", "delete", `${BUCKET}/${key}`, "--remote"]);
   },
 };
 

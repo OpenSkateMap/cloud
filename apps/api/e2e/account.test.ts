@@ -138,10 +138,13 @@ describe.skipIf(!e2eUrl)("account (database)", () => {
     const avatarId = crypto.randomUUID();
     await db.insert(schema.photoUpload).values({ id: avatarId, uploadedBy: userId, r2Key: `photos/${avatarId}.jpg`, bytes: 1000, width: 400, height: 400 });
     await db.insert(schema.profile).values({ userId, avatarPhotoId: avatarId, avatarThumbhash: "1QcSHQRnh493V4dIh4eXh1h4kJUI" });
+    const clipId = crypto.randomUUID();
+    await db.insert(schema.clipUpload).values({ id: clipId, uploadedBy: userId, r2Key: `clips/${clipId}.mp4`, bytes: 1000, width: 96, height: 64, durationMs: 2000 });
     const deleted = await call("/v1/me", { method: "DELETE", headers: { authorization: `Bearer ${second}` } });
     expect(deleted.status).toBe(200);
     expect(await db.select().from(schema.user).where(eq(schema.user.id, userId))).toEqual([]);
     expect(await db.select().from(schema.session).where(eq(schema.session.userId, userId))).toEqual([]);
     expect(await db.select().from(schema.photoUpload).where(inArray(schema.photoUpload.id, [photoId, avatarId]))).toEqual([]);
+    expect(await db.select().from(schema.clipUpload).where(eq(schema.clipUpload.id, clipId))).toEqual([]);
   });
 });

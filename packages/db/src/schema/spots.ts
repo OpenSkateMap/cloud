@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { bigint, boolean, check, index, integer, pgSequence, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { user } from "./auth.ts";
 import { quoted } from "./checks.ts";
+import { clipUpload } from "./clips.ts";
 import { multiPolygon, point } from "./geo.ts";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).defaultNow().notNull();
@@ -85,9 +86,11 @@ export const spotPhoto = pgTable(
     uploadedBy: text("uploaded_by").references(() => user.id, { onDelete: "set null" }),
     position: integer("position").notNull(),
     createdAt: createdAt(),
+    clipId: text("clip_id").references(() => clipUpload.id, { onDelete: "set null" }),
   },
   (table) => [
     uniqueIndex("spot_photo_spot_position").on(table.spotId, table.position),
+    index("spot_photo_clip_idx").on(table.clipId).where(sql`${table.clipId} is not null`),
     check("spot_photo_rights", sql`${table.credit} is null or ${table.hasPermission}`),
   ],
 );

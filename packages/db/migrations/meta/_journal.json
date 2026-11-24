@@ -225,6 +225,13 @@
       "when": 1793344948210,
       "tag": "0031_spot_photo_edits",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1795504698773,
+      "tag": "0032_spot_clips",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,6 @@
 export * from "./auth.ts";
 export * from "./spots.ts";
+export * from "./clips.ts";
 export * from "./geo.ts";
 export * from "./submissions.ts";
 export * from "./review.ts";

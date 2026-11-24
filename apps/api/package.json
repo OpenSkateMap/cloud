@@ -15,7 +15,8 @@
     "create-city": "bun run scripts/create-city.ts",
     "seed:local": "bun run scripts/seed-local.ts",
     "grant-editor": "bun run scripts/grant-editor.ts",
-    "import-spots": "bun run scripts/import-spots.ts"
+    "import-spots": "bun run scripts/import-spots.ts",
+    "add-spot-photos": "bun run scripts/add-spot-photos.ts"
   },
   "dependencies": {
     "@hono/zod-openapi": "^1.6.0",
@@ -34,6 +35,7 @@
     "@types/pg": "^8.23.0",
     "cf": "1.0.0-beta.12",
     "pg": "^8.23.0",
+    "thumbhash": "^0.1.1",
     "vite": "^8.3.4"
   }
 }

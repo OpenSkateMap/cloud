@@ -20,7 +20,11 @@ const toPhoto = (row: Row): PhotoUpload => ({ id: row.id, width: row.width, heig
 const owned = (row: Row, uploaderId: string): Result<PhotoUpload, AppError> =>
   row.uploadedBy === uploaderId ? ok(toPhoto(row)) : err({ code: "forbidden", message: "This photo id belongs to someone else" });
 
-export async function savePhoto(db: Database, bucket: R2Bucket, uploaderId: string, photoId: string, body: Uint8Array): Promise<Result<PhotoUpload, AppError>> {
+export const PHOTO_HTTP_METADATA = { contentType: "image/jpeg", cacheControl: "public, max-age=31536000, immutable" } as const;
+
+export type PhotoStore = { put(key: string, value: Uint8Array, options: { httpMetadata: typeof PHOTO_HTTP_METADATA }): Promise<unknown>; delete(key: string): Promise<unknown> };
+
+export async function savePhoto(db: Database, bucket: PhotoStore, uploaderId: string, photoId: string, body: Uint8Array): Promise<Result<PhotoUpload, AppError>> {
   const [existing] = await db.select().from(photoUpload).where(eq(photoUpload.id, photoId));
   if (existing) return owned(existing, uploaderId);
 
@@ -28,7 +32,7 @@ export async function savePhoto(db: Database, bucket: R2Bucket, uploaderId: stri
   if (clean.isErr()) return err({ code: "validation_failed", message: `Not a usable photo: ${clean.error}` });
   const { bytes, width, height } = clean.value;
   const r2Key = `photos/${crypto.randomUUID()}.jpg`;
-  await bucket.put(r2Key, bytes, { httpMetadata: { contentType: "image/jpeg", cacheControl: "public, max-age=31536000, immutable" } });
+  await bucket.put(r2Key, bytes, { httpMetadata: PHOTO_HTTP_METADATA });
   const [created] = await db
     .insert(photoUpload)
     .values({ id: photoId, uploadedBy: uploaderId, r2Key, bytes: bytes.length, width, height })

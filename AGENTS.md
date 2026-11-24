@@ -52,6 +52,7 @@ through Hyperdrive, R2 for photos. The iOS app's client is generated from `apps/
 | Add or resize a city | `DATABASE_URL=... bun run --filter @openskatemap/api create-city --slug london --name London --country GB --bbox=-0.51,51.28,0.33,51.69` |
 | Make someone a city editor | `DATABASE_URL=... bun run --filter @openskatemap/api grant-editor <user-id> <city-slug> [--revoke]` |
 | Import a list of spots | `DATABASE_URL=... bun run --filter @openskatemap/api import-spots <spots.json> --as <admin-user-id> [--dry-run]`: each row is submitted and approved as that admin through the review services (no notices); a row within 60 m of a published spot is skipped; re-runs are safe |
+| Add photos to spots | `DATABASE_URL=... CLOUDFLARE_API_TOKEN=... bun run --filter @openskatemap/api add-spot-photos <photos.json> --as <admin-user-id> [--dry-run]`: each row (`key`, `spotId`, a JPEG `file`, optional `credit`) is uploaded to R2 with Wrangler and added to its spot as that admin's edit, approved at once (no notices); a spot's rows keep their order, so its first row becomes the cover of a spot without photos; re-runs are safe |
 
 ## Rules that hold everywhere
 

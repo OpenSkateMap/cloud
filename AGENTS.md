@@ -1,7 +1,7 @@
 # OpenSkateMap cloud
 
 The backend for OpenSkateMap: one Cloudflare Worker (Hono API) in front of PlanetScale Postgres with PostGIS
-through Hyperdrive, R2 for photos. The iOS app's client is generated from `apps/api/openapi.json`.
+through Hyperdrive, R2 for photos and clips. The iOS app's client is generated from `apps/api/openapi.json`.
 
 ## Layout
 
@@ -52,7 +52,7 @@ through Hyperdrive, R2 for photos. The iOS app's client is generated from `apps/
 | Add or resize a city | `DATABASE_URL=... bun run --filter @openskatemap/api create-city --slug london --name London --country GB --bbox=-0.51,51.28,0.33,51.69` |
 | Make someone a city editor | `DATABASE_URL=... bun run --filter @openskatemap/api grant-editor <user-id> <city-slug> [--revoke]` |
 | Import a list of spots | `DATABASE_URL=... bun run --filter @openskatemap/api import-spots <spots.json> --as <admin-user-id> [--dry-run]`: each row is submitted and approved as that admin through the review services (no notices); a row within 60 m of a published spot is skipped; re-runs are safe |
-| Add photos to spots | `DATABASE_URL=... CLOUDFLARE_API_TOKEN=... bun run --filter @openskatemap/api add-spot-photos <photos.json> --as <admin-user-id> [--dry-run]`: each row (`key`, `spotId`, a JPEG `file`, optional `credit`) is uploaded to R2 with Wrangler and added to its spot as that admin's edit, approved at once (no notices); a spot's rows keep their order, so its first row becomes the cover of a spot without photos; re-runs are safe |
+| Add photos to spots | `DATABASE_URL=... CLOUDFLARE_API_TOKEN=... bun run --filter @openskatemap/api add-spot-photos <photos.json> --as <admin-user-id> [--dry-run]`: each row (`key`, `spotId`, a JPEG `file`, optional `credit`, optional `clip`: a video, cut from `clipStart` seconds) is uploaded to R2 with Wrangler and added to its spot as that admin's edit, approved at once (no notices); a spot's rows keep their order, so its first row becomes the cover of a spot without photos. A clip is encoded with ffmpeg (H.264 High, shorter side at most 720 px, at most 30 fps, about 1.8 Mbps, silent, no metadata, faststart, at most 16 s; a row under 3 s fails) and goes up with its photo; a photo the key already has live is replaced in place, so the spot keeps its order and cover. Rows already on the spot are left alone, so re-runs are safe; `--dry-run` prints what each row adds (+), replaces (~) or leaves (=) |
 
 ## Rules that hold everywhere
 
@@ -177,7 +177,7 @@ through Hyperdrive, R2 for photos. The iOS app's client is generated from `apps/
   | (per address) | everything under `/v1`, before anything else | `ADDRESS_LIMITER` (1005) | 3,000/min per IP or IPv6 /64 |
   | (per account, or address without a token) | everything under `/v1` | `API_LIMITER` (1001) | 600/min |
   | (per address) | `POST /v1/auth/apple` | `AUTH_LIMITER` (1002) | 20/min |
-  | `contributions` | submissions, spot edits, photo uploads, videos | `WRITE_LIMITER` (1003) | 60/min (a 10-photo spot is 11) |
+  | `contributions` | submissions, spot edits, photo and clip uploads, videos | `WRITE_LIMITER` (1003) | 60/min (a 10-photo spot is 11) |
   | `votes` | `PUT /v1/spots/{id}/vote` | `WRITE_LIMITER` | 60/min |
   | `collections` | save/delete a collection, add/remove spots, change a role, remove a member, cancel an invite, answer an invitation or a request | `WRITE_LIMITER` | 60/min |
   | `review` | approve/reject/undo spots, edits and videos; take a spot down or restore it | `WRITE_LIMITER` | 60/min |
@@ -240,6 +240,15 @@ through Hyperdrive, R2 for photos. The iOS app's client is generated from `apps/
   appearing or leaving touches its spot (trigger, migration 0012), so the spot gets a new version and apps fetch
   its details again. Who added a video is hidden from a viewer who blocked them; the video stays.
 - **Reports** accept `targetKind: "video"`.
+
+## Clips
+
+- **A clip plays in place of a photo**, muted and looped; the photo stays its poster, so anything that shows only photos still works. `PUT /v1/clips/{clipId}` (`saveClip`, `src/services/clips.ts`) takes `video/mp4` up to 15 MB under the photo upload's id rules (outbox id, immutable, another account's is 403) at a random key (`clips/<uuid>.mp4`). A draft's photo names it as `clipId`, each clip once per draft, uploaded first (422 with `details.missingClips`).
+- **Metadata never reaches storage here either.** `cleanMp4()` (`src/lib/mp4.ts`) takes exactly one H.264 track (`avc1`/`avc3`) of at most 16 s (`CLIP_MAX_DURATION_MS`, also `clip_upload`'s CHECK) and 1920 px a side (the track header's size, turned by its matrix), with `moov` before `mdat` (faststart), unfragmented. It rebuilds the file as `ftyp`, `moov` (`mvhd`, and the track's `tkhd`, `edts`, `tref`, `mdia`), `mdat`, zeroes recording times and moves every chunk offset to match. Sound and any other track are refused, never dropped: their samples would stay in `mdat`, and timed metadata can carry locations.
+- **Served straight from R2** at `images.openskatemap.app/<key>`: a faststart MP4 plays as it loads, so no Images transformations (nothing counts against the cap), Stream or HLS.
+- **Carried through review like photos.** Approval copies a new upload's `submission_photo.clip_id` into `spot_photo.clip_id`; an edit's kept photos have no clip of their own, so the spot photo keeps whatever it has. The approve event's photos before carry `clipId`, so undo restores it (dropped if the clip was swept since).
+- **Details only**: `SpotPhoto.clip` and `SubmissionPhoto.clip` (`SpotPhotoClip`), left out when there is none. The sync index, share card and collections snapshot carry only the cover.
+- **Unused clips go after a week** like photos (`isUnusedClip`: no submission's or spot's photo plays it), sharing housekeeping's 1,000 a day after photos, and with an account's other unused uploads when it's deleted.
 
 ## Votes
 
@@ -317,7 +326,7 @@ through Hyperdrive, R2 for photos. The iOS app's client is generated from `apps/
 - **Public profiles never include an email.** Stats: submissions, approvals, cities with an approved spot.
 - **Blocks** (`user_block`): the blocker no longer sees the blocked person's name on spots (added by, photo
   credit), and the blocked person gets `not_found` for the blocker's profile.
-- **Deleting an account** (`deleteAccount`) cascades its votes away, and also deletes its unused uploads (the avatar, photos never submitted),
+- **Deleting an account** (`deleteAccount`) cascades its votes away, and also deletes its unused uploads (the avatar, photos and clips never submitted),
   both rows and R2 objects. Submitted photos stay without attribution.
 - **Reports** (`report`, App Store guideline 1.2) go to admins; the target must exist. Admins work them in the
   database for now.
@@ -413,7 +422,7 @@ Worker secrets stay as they are (rotate one with `cf workers secrets update`). T
 | Hyperdrive `openskatemap-db` | PlanetScale integration, connecting as `openskatemap_app`; caching off, 15 origin connections. Created from the Cloudflare dashboard, then its credentials were replaced with the app role: the integration's own role inherits `postgres`, so it was deleted |
 | Worker `openskatemap-api` | `api.openskatemap.app`, placement `aws:us-east-1`, `workers.dev` off |
 | Worker `openskatemap-web` | `openskatemap.app` (apex custom domain), static assets plus a Worker for `/spots/*` and `/cards/spots/*`; bindings `API` (service → `openskatemap-api`), `IMAGES`; `workers.dev` off |
-| R2 `openskatemap-photos` (binding `PHOTOS`) | Private photos |
+| R2 `openskatemap-photos` (binding `PHOTOS`) | Photos and clips |
 
 Secrets live in the 1Password vault **OpenSkateMap**; GitHub holds copies in the `production` environment. After rotating a value in 1Password, update the GitHub secret too: `op read <ref> | gh secret set <NAME> --env production`.
 

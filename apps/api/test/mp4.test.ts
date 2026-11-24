@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { cleanMp4 } from "../src/lib/mp4.ts";
 
 // Made once with ffmpeg's testsrc at 96×64, 8 fps, libx264 High; see `clip-*` in this folder.
-const fixture = (name: string) => new Uint8Array(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
+const fixture = (name: string) => new Uint8Array(readFileSync(new URL(`./fixtures/${name}`, import.meta.url).pathname));
 const withMetadata = fixture("clip-metadata.mp4");
 
 type Box = { type: string; start: number; body: number; end: number };

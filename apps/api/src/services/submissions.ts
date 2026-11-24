@@ -1,11 +1,12 @@
 import type { Database } from "@openskatemap/db";
-import { collection, collectionSpot, photoUpload, reviewEvent, spot, spotPhoto, submission, submissionPhoto } from "@openskatemap/db/schema";
+import { clipUpload, collection, collectionSpot, photoUpload, reviewEvent, spot, spotPhoto, submission, submissionPhoto } from "@openskatemap/db/schema";
 import { and, asc, desc, eq, exists, inArray, isNotNull, type SQL, sql } from "drizzle-orm";
 import { QueryBuilder } from "drizzle-orm/pg-core";
 import type { AppError } from "../lib/errors.ts";
 import { err, ok, type Result } from "../lib/result.ts";
-import type { NewSpotDraft, PhotoCredit, Submission } from "../lib/submission-schemas.ts";
+import { draftClipIds, type NewSpotDraft, type PhotoCredit, type Submission } from "../lib/submission-schemas.ts";
 import { privateDestination } from "./collections.ts";
+import { requireClips } from "./clips.ts";
 import { requireUploads } from "./photos.ts";
 import { inTransaction } from "../lib/transaction";
 
@@ -37,6 +38,8 @@ const toCredit = ({ credit, sourceUrl }: { credit: string | null; sourceUrl: str
 export async function saveSubmission(db: Database, submitterId: string, id: string, draft: NewSpotDraft): Promise<Result<Submission, AppError>> {
   const uploaded = await requireUploads(db, submitterId, draft.photos.map((photo) => photo.photoId));
   if (uploaded.isErr()) return err(uploaded.error);
+  const clipped = await requireClips(db, submitterId, draftClipIds(draft.photos));
+  if (clipped.isErr()) return err(clipped.error);
 
   if (draft.collectionId !== undefined) {
     const destination = await privateDestination(db, submitterId, draft.collectionId);
@@ -67,7 +70,14 @@ export async function saveSubmission(db: Database, submitterId: string, id: stri
     await tx.delete(submissionPhoto).where(eq(submissionPhoto.submissionId, id));
     if (draft.photos.length > 0) {
       await tx.insert(submissionPhoto).values(
-        draft.photos.map((photo, position) => ({ submissionId: id, photoId: photo.photoId, position, thumbhash: photo.thumbhash, ...creditColumns(photo.credit) })),
+        draft.photos.map((photo, position) => ({
+          submissionId: id,
+          photoId: photo.photoId,
+          clipId: photo.clipId ?? null,
+          position,
+          thumbhash: photo.thumbhash,
+          ...creditColumns(photo.credit),
+        })),
       );
     }
     if (draft.collectionId !== undefined) await publishPrivately(tx, submitterId, id, draft.collectionId);
@@ -87,6 +97,7 @@ const entryPhoto = {
   width: sql<number>`coalesce(${photoUpload.width}, ${spotPhoto.width})`,
   height: sql<number>`coalesce(${photoUpload.height}, ${spotPhoto.height})`,
 };
+const entryClipId = sql<string | null>`coalesce(${submissionPhoto.clipId}, ${spotPhoto.clipId})`;
 // A spot photo an edit kept may be gone since; an undo can bring it back under the same id.
 const entryExists = sql<boolean>`(${submissionPhoto.photoId} is not null or ${spotPhoto.id} is not null)`;
 
@@ -95,6 +106,7 @@ export function submissionPhotoRows(db: Database, submissionId: string) {
     .select({
       ...entryPhoto,
       uploadedBy: photoUpload.uploadedBy,
+      clipId: submissionPhoto.clipId,
       thumbhash: submissionPhoto.thumbhash,
       credit: submissionPhoto.credit,
       hasPermission: submissionPhoto.hasPermission,
@@ -198,10 +210,12 @@ export async function loadSubmissions(
             credit: submissionPhoto.credit,
             sourceUrl: submissionPhoto.sourceUrl,
             position: submissionPhoto.position,
+            clip: { key: clipUpload.r2Key, width: clipUpload.width, height: clipUpload.height, durationMs: clipUpload.durationMs },
           })
           .from(submissionPhoto)
           .leftJoin(photoUpload, eq(photoUpload.id, submissionPhoto.photoId))
           .leftJoin(spotPhoto, eq(spotPhoto.id, submissionPhoto.spotPhotoId))
+          .leftJoin(clipUpload, eq(clipUpload.id, entryClipId))
           .where(and(inArray(submissionPhoto.submissionId, rows.map((row) => row.id)), entryExists))
           .orderBy(asc(submissionPhoto.position));
   const photosBySubmission = Map.groupBy(photos, (photo) => photo.submissionId);
@@ -209,11 +223,12 @@ export async function loadSubmissions(
     ...row,
     ...location,
     removal: removalReason !== null && removedAt !== null ? { reason: removalReason, removedAt: removedAt.toISOString() } : null,
-    photos: (photosBySubmission.get(row.id) ?? []).map(({ submissionId: _, spotPhotoId, r2Key, credit, sourceUrl, ...photo }) => ({
+    photos: (photosBySubmission.get(row.id) ?? []).map(({ submissionId: _, spotPhotoId, r2Key, credit, sourceUrl, clip, ...photo }) => ({
       ...photo,
       key: r2Key,
       credit: toCredit({ credit, sourceUrl }),
       existing: spotPhotoId !== null,
+      ...(clip === null ? {} : { clip }),
     })),
     createdAt: createdAt.toISOString(),
     updatedAt: updatedAt.toISOString(),

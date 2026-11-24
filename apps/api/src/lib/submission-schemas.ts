@@ -1,6 +1,6 @@
 import { z } from "@hono/zod-openapi";
 import { REJECT_REASONS, SPOT_EDIT_FIELDS, SUBMISSION_KINDS, SUBMISSION_STATUSES } from "@openskatemap/db/schema";
-import { IdSchema, NearbySpotSchema, ReviewerRoleSchema, SpotConditionSchema, SpotKindSchema, SpotRemovalSchema } from "./spot-schemas.ts";
+import { IdSchema, NearbySpotSchema, ReviewerRoleSchema, SpotConditionSchema, SpotKindSchema, SpotPhotoClipSchema, SpotRemovalSchema } from "./spot-schemas.ts";
 import { VideoReviewCardSchema } from "./video-schemas.ts";
 
 const latitude = z.number().min(-90).max(90);
@@ -30,9 +30,16 @@ export type PhotoCredit = z.infer<typeof PhotoCreditSchema>;
 const MAX_SPOT_PHOTOS = 30;
 
 export const UploadedPhotoRefSchema = z.object({ photoId: z.uuid(), thumbhash });
-const DraftPhotoSchema = UploadedPhotoRefSchema.extend({ credit: PhotoCreditSchema });
+const DraftPhotoSchema = UploadedPhotoRefSchema.extend({
+  credit: PhotoCreditSchema,
+  clipId: z.uuid().optional().openapi({
+    description: "A clip uploaded with PUT /v1/clips/{clipId} that plays in place of this photo, muted and looped; the photo is its poster",
+  }),
+});
 const distinctIds = (ids: string[]) => new Set(ids).size === ids.length;
 const distinctPhotos = (photos: { photoId: string }[]) => distinctIds(photos.map((photo) => photo.photoId));
+export const draftClipIds = (photos: readonly { clipId?: string | undefined }[]) => photos.flatMap((photo) => (photo.clipId === undefined ? [] : [photo.clipId]));
+const distinctClips = (photos: { clipId?: string | undefined }[]) => distinctIds(draftClipIds(photos));
 const bothOrNeither = (place: { latitude?: number | undefined; longitude?: number | undefined }) => (place.latitude === undefined) === (place.longitude === undefined);
 const note = z.string().trim().max(500).default("").openapi({ description: "For the curator; never shown on the spot" });
 
@@ -44,6 +51,16 @@ export const PhotoUploadSchema = z
     bytes: z.int().openapi({ description: "Stored size, after metadata was removed" }),
   })
   .openapi("PhotoUpload");
+
+export const ClipUploadSchema = z
+  .object({
+    id: z.string(),
+    width: z.int().openapi({ description: "Measured by the server, as the clip plays (turned by its track's matrix)" }),
+    height: z.int(),
+    durationMs: z.int(),
+    bytes: z.int().openapi({ description: "Stored size, after metadata was removed" }),
+  })
+  .openapi("ClipUpload");
 
 export const NewSpotDraftSchema = z
   .object({
@@ -63,6 +80,7 @@ export const NewSpotDraftSchema = z
       .array(DraftPhotoSchema)
       .max(10)
       .refine(distinctPhotos, "Each photo may appear once")
+      .refine(distinctClips, "Each clip may appear once")
       .openapi({ description: "In display order; the first is the cover. May be empty: the spot shows its kind until a photo is added" }),
   })
   .openapi("NewSpotDraft");
@@ -99,6 +117,7 @@ export const SpotEditDraftSchema = z
       .array(DraftPhotoSchema)
       .max(10)
       .refine(distinctPhotos, "Each photo may appear once")
+      .refine(distinctClips, "Each clip may appear once")
       .default([])
       .openapi({ description: "New photos, placed by `photoEdit.order`; without `photoEdit`, after the spot's own" }),
     photoEdit: SpotPhotoEditSchema.optional(),
@@ -121,7 +140,8 @@ export const SubmissionPhotoSchema = z
     thumbhash: z.string(),
     credit: PhotoCreditSchema,
     position: z.int(),
-    existing: z.boolean().openapi({ description: "One of the edited spot's own photos, kept by the edit; its credit is the spot's" }),
+    existing: z.boolean().openapi({ description: "One of the edited spot's own photos, kept by the edit; its credit and clip are the spot's" }),
+    clip: SpotPhotoClipSchema.optional(),
   })
   .openapi("SubmissionPhoto");
 
@@ -152,6 +172,7 @@ export const SubmissionSchema = z
 
 export type Submission = z.infer<typeof SubmissionSchema>;
 export type PhotoUpload = z.infer<typeof PhotoUploadSchema>;
+export type ClipUpload = z.infer<typeof ClipUploadSchema>;
 
 export const SpotEditsSchema = z
   .object({

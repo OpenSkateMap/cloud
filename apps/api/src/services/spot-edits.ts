@@ -1,11 +1,12 @@
 import { z } from "@hono/zod-openapi";
 import type { Database } from "@openskatemap/db";
-import { reviewEvent, SPOT_CONDITIONS, SPOT_EDIT_FIELDS, SPOT_KINDS, spot, spotPhoto, submission, submissionPhoto, user } from "@openskatemap/db/schema";
+import { clipUpload, reviewEvent, SPOT_CONDITIONS, SPOT_EDIT_FIELDS, SPOT_KINDS, spot, spotPhoto, submission, submissionPhoto, user } from "@openskatemap/db/schema";
 import { and, asc, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import type { PgInsertValue } from "drizzle-orm/pg-core";
 import type { AppError } from "../lib/errors.ts";
 import { type Attempt, err, ok, type Result, safeTry } from "../lib/result.ts";
-import type { SpotEditDraft, SpotEdits, Submission } from "../lib/submission-schemas.ts";
+import { draftClipIds, type SpotEditDraft, type SpotEdits, type Submission } from "../lib/submission-schemas.ts";
+import { requireClips } from "./clips.ts";
 import { requireUploads } from "./photos.ts";
 import { creditColumns, type EntryPhoto, loadSubmissions, pickPhotos, submissionPhotoRows, uploadedPhoto } from "./submissions.ts";
 import { inTransaction } from "../lib/transaction";
@@ -37,6 +38,8 @@ const StoredSpotPhotoSchema = z.object({
   uploadedBy: z.string().nullable(),
   position: z.int(),
   createdAt: z.coerce.date(),
+  // Approvals recorded before clips existed have none.
+  clipId: z.string().nullable().default(null),
 });
 const PhotoChangeSchema = z.object({ before: z.array(StoredSpotPhotoSchema), after: z.array(z.string()) });
 const ApprovedEditSchema = z.object({
@@ -145,6 +148,8 @@ export async function saveSpotEdit(db: Database, submitterId: string, id: string
   }
   const uploaded = await requireUploads(db, submitterId, draft.photos.map((photo) => photo.photoId));
   if (uploaded.isErr()) return err(uploaded.error);
+  const clipped = await requireClips(db, submitterId, draftClipIds(draft.photos));
+  if (clipped.isErr()) return err(clipped.error);
   const current = await editableSpot(db, draft.spotId);
   if (!current) return err(noSuchSpot);
   const currentPhotos = await spotPhotos(db, draft.spotId);
@@ -185,7 +190,12 @@ type EntryRow = Omit<typeof submissionPhoto.$inferInsert, "submissionId" | "posi
 
 function editPhotos(id: string, draft: SpotEditDraft, currentPhotos: (typeof spotPhoto.$inferSelect)[]): Result<EditPhotos, AppError> {
   const placed = (rows: EntryRow[]) => rows.map((row, position) => ({ ...row, submissionId: id, position }));
-  const newPhoto = (photo: SpotEditDraft["photos"][number]): EntryRow => ({ photoId: photo.photoId, thumbhash: photo.thumbhash, ...creditColumns(photo.credit) });
+  const newPhoto = (photo: SpotEditDraft["photos"][number]): EntryRow => ({
+    photoId: photo.photoId,
+    clipId: photo.clipId ?? null,
+    thumbhash: photo.thumbhash,
+    ...creditColumns(photo.credit),
+  });
   if (draft.photoEdit === undefined) {
     return ok({ basePhotoIds: null, entries: placed(draft.photos.map(newPhoto)), photosChange: draft.photos.length > 0 });
   }
@@ -329,15 +339,26 @@ export async function revertEdit(tx: Database, submissionId: string, spotId: str
 async function restorePhotos(tx: Database, spotId: string, { before, after }: PhotoChange) {
   const now = (await spotPhotos(tx, spotId)).map((photo) => photo.id);
   if (!sameIds(now, after)) return;
-  const uploaders = [...new Set(before.flatMap((photo) => (photo.uploadedBy === null || now.includes(photo.id) ? [] : [photo.uploadedBy])))];
+  const returning = before.filter((photo) => !now.includes(photo.id));
+  const uploaders = [...new Set(returning.flatMap((photo) => (photo.uploadedBy === null ? [] : [photo.uploadedBy])))];
   // An uploader may have deleted their account since; their photos stay, unattributed.
   const accounts = uploaders.length === 0 ? [] : await tx.select({ id: user.id }).from(user).where(inArray(user.id, uploaders));
   const alive = new Set(accounts.map((account) => account.id));
+  // A clip nothing played while the photo was away may have been swept; the photo comes back without it.
+  const clipIds = [...new Set(returning.flatMap((photo) => (photo.clipId === null ? [] : [photo.clipId])))];
+  const clips = clipIds.length === 0 ? [] : await tx.select({ id: clipUpload.id }).from(clipUpload).where(inArray(clipUpload.id, clipIds));
+  const kept = new Set(clips.map((clip) => clip.id));
   await setPhotos(
     tx,
     spotId,
     before.map(({ position: _, ...photo }) =>
-      now.includes(photo.id) ? photo.id : { ...photo, uploadedBy: photo.uploadedBy !== null && alive.has(photo.uploadedBy) ? photo.uploadedBy : null },
+      now.includes(photo.id)
+        ? photo.id
+        : {
+            ...photo,
+            uploadedBy: photo.uploadedBy !== null && alive.has(photo.uploadedBy) ? photo.uploadedBy : null,
+            clipId: photo.clipId !== null && kept.has(photo.clipId) ? photo.clipId : null,
+          },
     ),
   );
 }

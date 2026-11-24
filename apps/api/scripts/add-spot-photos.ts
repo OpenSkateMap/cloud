@@ -10,7 +10,7 @@ import { rgbaToThumbHash } from "thumbhash";
 import { z } from "zod";
 import type { CurrentUser } from "../src/env.ts";
 import { PhotoCreditSchema } from "../src/lib/submission-schemas.ts";
-import { type PhotoStore, savePhoto } from "../src/services/photos.ts";
+import { savePhoto, type UploadStore } from "../src/services/photos.ts";
 import { approveSubmission } from "../src/services/review.ts";
 import { saveSpotEdit } from "../src/services/spot-edits.ts";
 
@@ -64,7 +64,7 @@ async function wrangler(args: string[], attempts = 3) {
   }
 }
 
-const store: PhotoStore = {
+const store: UploadStore = {
   async put(key, value, options) {
     const path = join(scratch, key.replaceAll("/", "_"));
     await writeFile(path, value);

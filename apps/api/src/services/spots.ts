@@ -1,5 +1,5 @@
 import type { Database } from "@openskatemap/db";
-import { city, spot, spotPhoto, submission, user } from "@openskatemap/db/schema";
+import { city, clipUpload, spot, spotPhoto, submission, user } from "@openskatemap/db/schema";
 import { and, asc, eq, gt, inArray, max, type SQL, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { City, NearbySpot, SpotCard, SpotDetails, SyncPage } from "../lib/spot-schemas.ts";
@@ -85,9 +85,11 @@ export async function spotDetails(db: Database, viewerId: string, ids: readonly 
             uploaderName: uploader.name,
             uploaderBlocked: hasBlocked(viewerId, spotPhoto.uploadedBy),
             position: spotPhoto.position,
+            clip: { key: clipUpload.r2Key, width: clipUpload.width, height: clipUpload.height, durationMs: clipUpload.durationMs },
           })
           .from(spotPhoto)
           .leftJoin(uploader, eq(uploader.id, spotPhoto.uploadedBy))
+          .leftJoin(clipUpload, eq(clipUpload.id, spotPhoto.clipId))
           .where(inArray(spotPhoto.spotId, rows.map((row) => row.id)))
           .orderBy(asc(spotPhoto.position));
   const photosBySpot = Map.groupBy(photos, (photo) => photo.spotId);
@@ -99,9 +101,10 @@ export async function spotDetails(db: Database, viewerId: string, ids: readonly 
       ...row,
       ...location,
       addedBy: addedByBlocked ? null : addedBy,
-      photos: (photosBySpot.get(row.id) ?? []).map(({ spotId: _, namedCredit, uploaderName, uploaderBlocked, ...photo }) => ({
+      photos: (photosBySpot.get(row.id) ?? []).map(({ spotId: _, namedCredit, uploaderName, uploaderBlocked, clip, ...photo }) => ({
         ...photo,
         credit: namedCredit ?? (uploaderBlocked ? null : uploaderName),
+        ...(clip === null ? {} : { clip }),
       })),
       videos: videosBySpot.get(row.id) ?? [],
       votes: votesBySpot.get(row.id) ?? noVotes,

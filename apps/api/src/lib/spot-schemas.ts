@@ -65,6 +65,15 @@ export const SyncPageSchema = z
   })
   .openapi("SyncPage");
 
+export const SpotPhotoClipSchema = z
+  .object({
+    key: z.string().openapi({ description: "The MP4 at https://images.openskatemap.app/<key>, served as it is (no image transformations)" }),
+    width: z.int(),
+    height: z.int(),
+    durationMs: z.int(),
+  })
+  .openapi("SpotPhotoClip", { description: "A short clip that plays in place of the photo, muted and looped; the photo is its poster" });
+
 export const SpotPhotoSchema = z
   .object({
     id: z.string(),
@@ -74,6 +83,7 @@ export const SpotPhotoSchema = z
     thumbhash: z.string(),
     credit: z.string().nullable().openapi({ description: "Who took it: the photographer named by the submitter, else the uploader's name; null if unknown" }),
     position: z.int(),
+    clip: SpotPhotoClipSchema.optional(),
   })
   .openapi("SpotPhoto");
 

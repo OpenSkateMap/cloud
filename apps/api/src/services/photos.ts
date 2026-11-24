@@ -22,9 +22,12 @@ const owned = (row: Row, uploaderId: string): Result<PhotoUpload, AppError> =>
 
 export const PHOTO_HTTP_METADATA = { contentType: "image/jpeg", cacheControl: "public, max-age=31536000, immutable" } as const;
 
-export type PhotoStore = { put(key: string, value: Uint8Array, options: { httpMetadata: typeof PHOTO_HTTP_METADATA }): Promise<unknown>; delete(key: string): Promise<unknown> };
+export type UploadStore = {
+  put(key: string, value: Uint8Array, options: { httpMetadata: { contentType: string; cacheControl: string } }): Promise<unknown>;
+  delete(key: string): Promise<unknown>;
+};
 
-export async function savePhoto(db: Database, bucket: PhotoStore, uploaderId: string, photoId: string, body: Uint8Array): Promise<Result<PhotoUpload, AppError>> {
+export async function savePhoto(db: Database, bucket: UploadStore, uploaderId: string, photoId: string, body: Uint8Array): Promise<Result<PhotoUpload, AppError>> {
   const [existing] = await db.select().from(photoUpload).where(eq(photoUpload.id, photoId));
   if (existing) return owned(existing, uploaderId);
 

@@ -6,7 +6,7 @@ import { SCHEDULES } from "./schedules.ts";
 import { newSpotsDigest, reviewEscalations } from "./services/notifications.ts";
 import { eraseElsewhere } from "./services/account.ts";
 import { deleteDueAccounts } from "./services/apple-account-events.ts";
-import { deleteSweptPhotos, sweep } from "./services/housekeeping.ts";
+import { deleteSweptUploads, sweep } from "./services/housekeeping.ts";
 import { refreshSpotScores } from "./services/spot-score.ts";
 
 const app = createApp();
@@ -41,7 +41,7 @@ export default {
         return;
       case SCHEDULES.housekeeping: {
         const swept = await onDatabase(env, "Housekeeping", (db) => sweep(db, now));
-        if (swept) await deleteSweptPhotos(env.PHOTOS, swept);
+        if (swept) await deleteSweptUploads(env.PHOTOS, swept);
         const deleted = await onDatabase(env, "Apple account deletions", (db) => deleteDueAccounts(db, env.PHOTOS, now));
         await Promise.all((deleted ?? []).flatMap((userId) => eraseElsewhere(env, userId)));
         return;

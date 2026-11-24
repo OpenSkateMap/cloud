@@ -8,6 +8,7 @@ import { createRouter } from "./lib/openapi-app.ts";
 import { respondError } from "./lib/respond.ts";
 import { rateLimitByIp } from "./middleware/rate-limit.ts";
 import { auth } from "./routes/auth.ts";
+import { clips } from "./routes/clips.ts";
 import { collections } from "./routes/collections.ts";
 import { health } from "./routes/health.ts";
 import { me } from "./routes/me.ts";
@@ -46,7 +47,7 @@ export function createApp() {
   });
   app.use("/v1/*", apiHeaders);
   app.use("/v1/*", rateLimitByIp("ADDRESS_LIMITER"));
-  app.use("/v1/*", except("/v1/photos/*", limitBody));
+  app.use("/v1/*", except(["/v1/photos/*", "/v1/clips/*"], limitBody));
 
   app.route("/", health);
   app.route("/", auth);
@@ -57,6 +58,7 @@ export function createApp() {
   app.route("/", videos);
   app.route("/", votes);
   app.route("/", photos);
+  app.route("/", clips);
   app.route("/", review);
   app.route("/", people);
   app.route("/", collections);

@@ -1,5 +1,5 @@
 import type { Database } from "@openskatemap/db";
-import { cityEditor, reviewEvent, spot, spotPhoto, submission, user } from "@openskatemap/db/schema";
+import { city, cityEditor, reviewEvent, spot, spotPhoto, submission, user } from "@openskatemap/db/schema";
 import { and, desc, eq, inArray, not, or, type SQL, sql } from "drizzle-orm";
 import type { CurrentUser } from "../env.ts";
 import type { AppError } from "../lib/errors.ts";
@@ -116,7 +116,9 @@ export async function reviewQueue(db: Database, actor: CurrentUser, cityId: stri
     ...video,
     reviewAs: covers(scope, video.spot.cityId) ? ("curator" as const) : ("owner" as const),
   }));
-  return { cityIds, items, videos };
+  const itemCityIds = [...new Set(items.flatMap((item) => (item.cityId ? [item.cityId] : [])))];
+  const cities = itemCityIds.length === 0 ? [] : await db.select({ id: city.id, name: city.name, names: city.names }).from(city).where(inArray(city.id, itemCityIds));
+  return { cityIds, items, videos, cities };
 }
 
 async function cardDetails(db: Database, submissionIds: string[]) {

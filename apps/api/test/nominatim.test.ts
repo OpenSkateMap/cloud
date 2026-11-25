@@ -64,21 +64,59 @@ describe("findCityPlace", () => {
     expect(nominatim.asked[0]!.userAgent).toBe(LOOKUP_USER_AGENT);
   });
 
-  test("Kuta is a suburb at zoom 10, so zoom 8's regency, Badung, is the place, a second later", async () => {
-    const nominatim = fixtures({ "10": answer(7760993, "suburb", "Kuta"), "8": answer(14613953, "region", "Badung", { extratags: { wikidata: "Q11482" } }) });
-    const place = (await findCityPlace(kuta, nominatim.lookup))._unsafeUnwrap();
-    expect(place).toMatchObject({ id: "relation/14613953", name: "Badung", addressType: "region", wikidataId: "Q11482" });
-    expect(nominatim.asked.map(({ url }) => new URL(url).searchParams.get("zoom"))).toEqual(["10", "8"]);
-    expect(nominatim.pauses).toEqual([1000]);
+  const place = (answers: Record<string, unknown>) => async () => {
+    const nominatim = fixtures(answers);
+    const found = (await findCityPlace(kuta, nominatim.lookup))._unsafeUnwrap();
+    return { name: found.name, zooms: nominatim.asked.map(({ url }) => new URL(url).searchParams.get("zoom")), pauses: nominatim.pauses.length };
+  };
+  const london = { address: { country_code: "gb", city: "Greater London" } };
+
+  test("a borough whose city is wider asks zoom 6, then 5, for the place of that name", async () => {
+    const camden = place({ "10": answer(51827, "city_district", "London Borough of Camden", london), "6": answer(175342, "city", "Greater London", london) });
+    expect(await camden()).toEqual({ name: "Greater London", zooms: ["10", "6"], pauses: 1 });
+    const mapo = place({
+      "10": answer(3884279, "suburb", "Seogyo-dong", { address: { country_code: "kr", city: "Seoul" } }),
+      "6": answer(2297418, "city", "Seoul", { address: { country_code: "kr", city: "Seoul" } }),
+    });
+    expect(await mapo()).toEqual({ name: "Seoul", zooms: ["10", "6"], pauses: 1 });
+    const york = { address: { country_code: "us", city: "New York" } };
+    const brooklyn = place({ "10": answer(9691750, "suburb", "Brooklyn", york), "6": answer(1, "state", "New York State", york), "5": answer(175905, "city", "New York", york) });
+    expect(await brooklyn()).toEqual({ name: "New York", zooms: ["10", "6", "5"], pauses: 2 });
+  });
+
+  test("a suburb or village without a wider city gives way to zoom 8's district or regency", async () => {
+    const kadikoy = place({
+      "10": answer(9426227, "suburb", "Osmanağa Mahallesi", { address: { country_code: "tr" } }),
+      "8": answer(1276548, "town", "Kadıköy", { address: { country_code: "tr" } }),
+    });
+    expect(await kadikoy()).toEqual({ name: "Kadıköy", zooms: ["10", "8"], pauses: 1 });
+    const canggu = place({ "10": answer(17840125, "village", "Canggu"), "8": answer(14613953, "region", "Badung", { extratags: { wikidata: "Q11482" } }) });
+    expect(await canggu()).toEqual({ name: "Badung", zooms: ["10", "8"], pauses: 1 });
+  });
+
+  test("a city that is its own address keeps zoom 10's answer, and so does a village whose zoom 8 is a province", async () => {
+    const shibuya = place({ "10": answer(1759477, "city", "Shibuya", { address: { country_code: "jp", city: "Shibuya" } }) });
+    expect(await shibuya()).toEqual({ name: "Shibuya", zooms: ["10"], pauses: 0 });
+    const paris = place({ "10": answer(7444, "suburb", "Paris", { address: { country_code: "fr", city: "Paris" } }) });
+    expect(await paris()).toEqual({ name: "Paris", zooms: ["10"], pauses: 0 });
+    const village = place({ "10": answer(5, "village", "Hamlet-on-Sea", { address: { country_code: "jp" } }), "8": answer(6, "province", "Shizuoka Prefecture", { address: { country_code: "jp" } }) });
+    expect(await village()).toEqual({ name: "Hamlet-on-Sea", zooms: ["10", "8"], pauses: 1 });
+  });
+
+  test("a wider city that never answers by its name falls back to the suburb rule", async () => {
+    const lost = place({ "10": answer(51827, "city_district", "Camden", london), "6": answer(58447, "state", "England", london), "5": answer(58447, "state", "England", london), "8": answer(175342, "city", "Greater London", london) });
+    expect(await lost()).toEqual({ name: "Greater London", zooms: ["10", "6", "5", "8"], pauses: 3 });
   });
 
   test("never a state, open sea or an answer without a country; a failed request is a failure, not a miss", async () => {
-    const state = fixtures({ "10": answer(1, "village", "Somewhere"), "8": answer(2, "state", "Bali") });
+    const state = fixtures({ "10": answer(2, "state", "Bali") });
     expect((await findCityPlace(kuta, state.lookup))._unsafeUnwrapErr()).toEqual({ kind: "no_city", addressType: "state" });
     expect((await findCityPlace(kuta, fixtures({}).lookup))._unsafeUnwrapErr()).toEqual({ kind: "no_city", addressType: null });
     const stateless = fixtures({ "10": answer(3, "city", "Nowhere", { address: {} }) });
     expect((await findCityPlace(kuta, stateless.lookup))._unsafeUnwrapErr()).toEqual({ kind: "no_city", addressType: "city" });
     expect((await findCityPlace(kuta, fixtures({ "10": "fail" }).lookup))._unsafeUnwrapErr()).toEqual({ kind: "unreachable", service: "nominatim", status: 503 });
+    const failingWider = fixtures({ "10": answer(1, "suburb", "Brooklyn", { address: { country_code: "us", city: "New York" } }), "6": "fail" });
+    expect((await findCityPlace(kuta, failingWider.lookup))._unsafeUnwrapErr()).toEqual({ kind: "unreachable", service: "nominatim", status: 503 });
   });
 
   test("a place mapped without a boundary keeps its box", async () => {

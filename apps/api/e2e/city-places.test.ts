@@ -5,7 +5,7 @@ import { eq, inArray, like, sql } from "drizzle-orm";
 import { createApp } from "../src/app.ts";
 import type { PlaceLookup } from "../src/lib/nominatim.ts";
 import { CitySchema } from "../src/lib/spot-schemas.ts";
-import { SubmissionSchema } from "../src/lib/submission-schemas.ts";
+import { ReviewQueueSchema, SubmissionSchema } from "../src/lib/submission-schemas.ts";
 import { cellOf, preloadCity } from "../src/services/city-places.ts";
 import { call, createRider, e2eUrl, read } from "./support.ts";
 
@@ -86,10 +86,12 @@ describe.skipIf(!e2eUrl)("automatic cities (database)", () => {
   const echo: FixturePlace = { osmId: osmId(5), name: `Echo ${tag}`, box: box(4) };
   const golf: FixturePlace = { osmId: osmId(7), name: `Golf ${tag}`, box: box(6), wikidata: "Q4007" };
   const hotel: FixturePlace = { osmId: osmId(8), name: `Hotel ${tag}`, box: box(7) };
+  const juliet: FixturePlace = { osmId: osmId(11), name: `Juliet ${tag}`, box: [west + 0.83, south - 0.01, west + 0.97, south + 0.11] };
+  const india: FixturePlace = { osmId: osmId(10), name: `India ${tag}`, box: box(8), wikidata: "Q4010", osmNames: { "name:ja": "インディア" } };
   const failingBox = box(2);
-  const fixtures = fixtureLookup([alpha, beta, delta, echo, golf, hotel], { Q4001: { de: `Alfa ${tag}`, ru: `Альфа Викиданные ${tag}` }, Q4007: { ja: "ゴルフ" } }, [failingBox]);
+  const fixtures = fixtureLookup([alpha, beta, delta, echo, golf, hotel, india, juliet], { Q4001: { de: `Alfa ${tag}`, ru: `Альфа Викиданные ${tag}` }, Q4007: { ja: "ゴルフ" } }, [failingBox]);
   const cityApp = createApp({ placeLookup: fixtures.lookup });
-  const places = [alpha, beta, delta, echo, golf, hotel].map((place) => `relation/${place.osmId}`);
+  const places = [alpha, beta, delta, echo, golf, hotel, india, juliet].map((place) => `relation/${place.osmId}`);
 
   let db: Database;
   let rider: Rider, admin: Rider;
@@ -254,10 +256,28 @@ describe.skipIf(!e2eUrl)("automatic cities (database)", () => {
     expect(fixtures.asked.length).toBe(asked);
   });
 
+  test("a submission in a city made ahead of its first spot names that city on its review card", async () => {
+    const created = (await preloadCity(db, fixtures.lookup, { wikidata: "Q4010", relation: india.osmId }))._unsafeUnwrap();
+    const pending = await submit(rider, at(8));
+    expect(pending.cityId).toBe(created.cityId);
+    expect(await listed()).not.toContain(created.cityId);
+
+    const queue = ReviewQueueSchema.parse((await call(`/v1/review/queue?cityId=${created.cityId}`, { headers: admin.bearer })).body.data);
+    expect(queue.items.find((item) => item.id === pending.id)?.cityId).toBe(created.cityId);
+    expect(queue.cities.find((row) => row.id === created.cityId)).toMatchObject({ name: `India ${tag}`, names: { en: `India ${tag}`, ja: "インディア" } });
+  });
+
   test("preloading a place whose Wikidata item a hand-drawn city has keeps that city as drawn", async () => {
     await db.update(city).set({ wikidataId: "Q4005" }).where(eq(city.id, handDrawn.id));
     const before = (await db.select().from(city).where(eq(city.id, handDrawn.id)))[0]!;
     expect((await preloadCity(db, fixtures.lookup, { wikidata: "Q4005", relation: osmId(9) }))._unsafeUnwrap()).toEqual({ kind: "kept", cityId: handDrawn.id });
+    expect((await db.select().from(city).where(eq(city.id, handDrawn.id)))[0]).toEqual(before);
+  });
+
+  test("preloading a wider place around a hand-drawn city keeps that city and makes none", async () => {
+    const before = (await db.select().from(city).where(eq(city.id, handDrawn.id)))[0]!;
+    expect((await preloadCity(db, fixtures.lookup, { wikidata: "Q4011", relation: juliet.osmId }))._unsafeUnwrap()).toEqual({ kind: "kept", cityId: handDrawn.id });
+    expect(await cityOf(`relation/${juliet.osmId}`)).toBeUndefined();
     expect((await db.select().from(city).where(eq(city.id, handDrawn.id)))[0]).toEqual(before);
   });
 });

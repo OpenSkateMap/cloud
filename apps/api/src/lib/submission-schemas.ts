@@ -1,6 +1,6 @@
 import { z } from "@hono/zod-openapi";
 import { REJECT_REASONS, SPOT_EDIT_FIELDS, SUBMISSION_KINDS, SUBMISSION_STATUSES } from "@openskatemap/db/schema";
-import { IdSchema, NearbySpotSchema, ReviewerRoleSchema, SpotConditionSchema, SpotKindSchema, SpotPhotoClipSchema, SpotRemovalSchema } from "./spot-schemas.ts";
+import { CityNameSchema, IdSchema, NearbySpotSchema, ReviewerRoleSchema, SpotConditionSchema, SpotKindSchema, SpotPhotoClipSchema, SpotRemovalSchema } from "./spot-schemas.ts";
 import { VideoReviewCardSchema } from "./video-schemas.ts";
 
 const latitude = z.number().min(-90).max(90);
@@ -228,6 +228,9 @@ export const ReviewQueueSchema = z
       .openapi({ description: "The cities this reviewer covers; null for admins, who cover everywhere; empty for everyone else" }),
     items: z.array(ReviewCardSchema).openapi({ description: "Pending submissions in those cities, and others' edits to spots you added; oldest first" }),
     videos: z.array(VideoReviewCardSchema).openapi({ description: "Pending videos of spots in the same cities, and of spots you added, oldest first" }),
+    cities: z.array(CityNameSchema).openapi({
+      description: "The cities the submissions are in, by name: one made ahead of its first spot isn't in `GET /v1/cities` yet",
+    }),
   })
   .openapi("ReviewQueue");
 

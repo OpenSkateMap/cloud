@@ -187,6 +187,8 @@ export const CitySchema = z
   })
   .openapi("City");
 
+export const CityNameSchema = CitySchema.pick({ id: true, name: true, names: true }).openapi("CityName");
+
 export type SpotIndexRow = z.infer<typeof SpotIndexRowSchema>;
 export type SyncPage = z.infer<typeof SyncPageSchema>;
 export type SpotDetails = z.infer<typeof SpotDetailsSchema>;

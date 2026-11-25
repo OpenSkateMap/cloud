@@ -22,8 +22,8 @@ export type CityFilingFailure =
 type PlaceAnswer = { readonly kind: "city" } | { readonly kind: "place"; readonly id: string };
 
 const MISS_DAYS = 21;
-// 12 waits of a second plus a lookup's 13 at most (three requests at 4 s, one pause) fit `waitUntil`'s 30.
-const LEASE_WAITS = 12;
+// 8 waits of a second plus a lookup's 18 at most (four requests at 4 s, two pauses) fit `waitUntil`'s 30.
+const LEASE_WAITS = 8;
 const LEASE_SECONDS = 30;
 
 const pointOf = ({ latitude, longitude }: Coordinate) => sql`ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326)`;
@@ -103,8 +103,8 @@ const recordMiss = (db: Database, point: Coordinate, reason: "no_city" | "outsid
   return db.insert(placeMiss).values({ cell: cellOf(point), reason, expiresAt }).onConflictDoUpdate({ target: placeMiss.cell, set: { reason, expiresAt } });
 };
 
-async function storePlace(db: Database, place: FoundPlace, lookup: PlaceLookup): Promise<Result<string, PlaceFailure>> {
-  const names = await placeNames(place, lookup);
+async function storePlace(db: Database, place: FoundPlace, lookup: PlaceLookup, namesFirst: "osm" | "wikidata" = "osm"): Promise<Result<string, PlaceFailure>> {
+  const names = await placeNames(place, lookup, namesFirst);
   if (names.isErr()) return err(names.error);
   await db
     .insert(osmPlace)
@@ -287,33 +287,51 @@ export function findCityAfter(c: Context<AppEnv>, decided: Submission) {
 export interface PreloadEntry {
   readonly wikidata: string;
   readonly relation: number;
+  /** In English; else the relation's own name. */
+  readonly name?: string;
 }
 
 export type Preloaded = { readonly kind: "created"; readonly cityId: string } | { readonly kind: "kept"; readonly cityId: string };
 
-/** Makes a big city ahead of its first spot from its OpenStreetMap relation; a city already made from it or its Wikidata item stays as it is. */
-export async function preloadCity(db: Database, lookup: PlaceLookup, { wikidata, relation }: PreloadEntry): Promise<Result<Preloaded, CityFilingFailure>> {
-  const placeId = `relation/${relation}`;
+/** The city already made from the entry's relation or Wikidata item, which preloading leaves as it is. */
+export async function preloadedCity(db: Database, { wikidata, relation }: PreloadEntry): Promise<{ id: string; slug: string } | undefined> {
+  const [known] = await db
+    .select({ id: city.id, slug: city.slug })
+    .from(city)
+    .where(sql`${city.osmPlaceId} = ${`relation/${relation}`} or ${city.wikidataId} = ${wikidata}`)
+    .limit(1);
+  return known;
+}
+
+/**
+ * Makes a big city ahead of its first spot from its OpenStreetMap relation. A city already made from it or its
+ * Wikidata item, or one lying inside it, stays as it is and no city is made.
+ */
+export async function preloadCity(db: Database, lookup: PlaceLookup, entry: PreloadEntry): Promise<Result<Preloaded, CityFilingFailure>> {
+  const placeId = `relation/${entry.relation}`;
   const existing = async () => {
-    const [known] = await db
-      .select({ id: city.id })
-      .from(city)
-      .where(sql`${city.osmPlaceId} = ${placeId} or ${city.wikidataId} = ${wikidata}`)
-      .limit(1);
+    const known = await preloadedCity(db, entry);
     return known ? ok<Preloaded, CityFilingFailure>({ kind: "kept", cityId: known.id }) : undefined;
   };
   const stored = await withLease(db, lookup, existing, async (): Promise<Result<Preloaded | undefined, CityFilingFailure>> => {
     const [cached] = await db.select({ id: osmPlace.id }).from(osmPlace).where(eq(osmPlace.id, placeId));
     if (cached) return ok(undefined);
-    const found = await relationPlace(relation, lookup);
+    const found = await relationPlace(entry.relation, lookup);
     if (found.isErr()) return err(found.error);
-    const saved = await storePlace(db, { ...found.value, wikidataId: wikidata }, lookup);
+    const saved = await storePlace(db, { ...found.value, wikidataId: entry.wikidata, name: entry.name ?? found.value.name }, lookup, "wikidata");
     return saved.isErr() ? err(saved.error) : ok(undefined);
   });
   if (stored === "busy") return err({ kind: "busy" });
   if (stored.isErr()) return err(stored.error);
   if (stored.value) return ok(stored.value);
   return inTransaction(db, async (tx): Promise<Result<Preloaded, CityFilingFailure>> => {
+    // A wider place around a city drawn by hand (the City of Belgrade around Belgrade) would only ring it.
+    const [inside] = await tx.execute<{ id: string }>(sql`
+      select c.id from city c, osm_place p
+      where p.id = ${placeId} and c.area && p.area and ST_Area(ST_Intersection(c.area, p.area)) >= 0.9 * ST_Area(c.area)
+      limit 1
+    `).then((result) => result.rows);
+    if (inside) return ok({ kind: "kept", cityId: inside.id });
     const made = await createCity(tx, placeId);
     if (made.isErr()) return err(made.error);
     await fileInto(tx, made.value);

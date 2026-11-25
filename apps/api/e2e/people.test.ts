@@ -5,7 +5,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { MeSchema } from "../src/lib/me.ts";
 import { BlockedUserSchema, PublicProfileSchema } from "../src/lib/people-schemas.ts";
 import { SpotDetailsSchema } from "../src/lib/spot-schemas.ts";
-import { saveCity } from "../src/services/cities.ts";
+import { boxArea, saveCity } from "../src/services/cities.ts";
 import { countingLimiter } from "../test/support.ts";
 import { call, createRider, e2eUrl, photosBucket, read } from "./support.ts";
 
@@ -98,7 +98,7 @@ describe.skipIf(!e2eUrl)("people (database)", () => {
     const cities = async () => PublicProfileSchema.parse((await profileOf(third.userId, other)).body.data).stats.cities;
     try {
       expect(await cities()).toBe(0);
-      await saveCity(db, { slug: lateSlug, name: `E2E late ${tag}`, countryCode: "NZ", bbox: [170.5, -45.51, 170.51, -45.5] });
+      await saveCity(db, { slug: lateSlug, name: `E2E late ${tag}`, countryCode: "NZ", area: boxArea([170.5, -45.51, 170.51, -45.5]) });
       expect(await cities()).toBe(1);
     } finally {
       await db.delete(submission).where(eq(submission.id, lateSubmissionId));

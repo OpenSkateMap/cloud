@@ -46,6 +46,7 @@ describe.skipIf(!e2eUrl)("spots (database)", () => {
       id: cityId,
       slug: `e2e-${tag}`,
       name: `E2E Southbank ${tag}`,
+      names: { en: `E2E Southbank ${tag}`, ru: `E2E Саутбэнк ${tag}` },
       countryCode: "GB",
       area: sql`ST_Multi(ST_MakeEnvelope(-0.125, 51.50, -0.105, 51.51, 4326))`,
     });
@@ -146,12 +147,13 @@ describe.skipIf(!e2eUrl)("spots (database)", () => {
     expect(ours[1]!.distanceMeters).toBeLessThan(60);
   });
 
-  test("cities come with their bounds", async () => {
+  test("cities come with their names in the apps' languages and their bounds", async () => {
     const { cities } = await read(z.object({ cities: z.array(CitySchema) }), "/v1/cities", { headers: rider.bearer });
     expect(cities.find((row) => row.id === cityId)).toEqual({
       id: cityId,
       slug: `e2e-${tag}`,
       name: `E2E Southbank ${tag}`,
+      names: { en: `E2E Southbank ${tag}`, ru: `E2E Саутбэнк ${tag}` },
       countryCode: "GB",
       bounds: { minLatitude: 51.5, minLongitude: -0.125, maxLatitude: 51.51, maxLongitude: -0.105 },
     });

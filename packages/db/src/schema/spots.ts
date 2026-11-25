@@ -1,5 +1,5 @@
 import { type SQL, sql } from "drizzle-orm";
-import { bigint, boolean, check, index, integer, pgSequence, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, index, integer, jsonb, pgSequence, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { user } from "./auth.ts";
 import { quoted } from "./checks.ts";
 import { clipUpload } from "./clips.ts";
@@ -13,6 +13,11 @@ export const SPOT_STATUSES = ["published", "removed"] as const;
 export const SPOT_VISIBILITIES = ["public", "private"] as const;
 export const SPOT_REMOVAL_REASONS = ["duplicate", "private_property", "unsafe_or_gone", "not_a_spot", "other"] as const;
 
+/** The apps' languages; a city's `names` has one entry for each, or none before its names were filled. */
+export const CITY_LANGUAGES = ["ar", "de", "en", "es", "fr", "hi", "it", "ja", "pl", "pt", "ru", "tr", "uk", "zh-Hans", "zh-Hant"] as const;
+export type CityLanguage = (typeof CITY_LANGUAGES)[number];
+export type CityNames = Partial<Record<CityLanguage, string>>;
+
 /** The sync cursor: migration 0003's trigger assigns it under an advisory lock, so versions follow commit order. */
 export const spotVersion = pgSequence("spot_version_seq", { startWith: 1 });
 
@@ -21,12 +26,20 @@ export const city = pgTable(
   {
     id: text("id").primaryKey(),
     slug: text("slug").notNull().unique(),
+    /** English; what every language without its own name shows. */
     name: text("name").notNull(),
+    names: jsonb("names").$type<CityNames>().notNull().default({}),
+    /** The Wikidata item the names come from. */
+    wikidataId: text("wikidata_id"),
     countryCode: text("country_code").notNull(),
     area: multiPolygon("area").notNull(),
     createdAt: createdAt(),
   },
-  (table) => [index("city_area_gist").using("gist", table.area)],
+  (table) => [
+    index("city_area_gist").using("gist", table.area),
+    check("city_names_object", sql`jsonb_typeof(${table.names}) = 'object'`),
+    check("city_wikidata_id_format", sql`${table.wikidataId} ~ '^Q[1-9][0-9]*$'`),
+  ],
 );
 
 export const spot = pgTable(

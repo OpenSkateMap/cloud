@@ -1,14 +1,36 @@
 import { openDatabase, schema } from "@openskatemap/db";
 import { sql } from "drizzle-orm";
-import { type CityInput, saveCity } from "../src/services/cities.ts";
+import { completeNames } from "../src/lib/wikidata.ts";
+import { boxArea, type CityInput, saveCity } from "../src/services/cities.ts";
 
 const databaseUrl = process.env.DATABASE_URL ?? "postgres://openskatemap_app:openskatemap_app@localhost:54330/openskatemap";
 const host = new URL(databaseUrl).hostname;
 if (host !== "localhost" && host !== "127.0.0.1") throw new Error(`Refusing to seed a non-local database: ${host}`);
 
 const CITIES: CityInput[] = [
-  { slug: "london", name: "London", countryCode: "GB", bbox: [-0.51, 51.28, 0.33, 51.69] },
-  { slug: "barcelona", name: "Barcelona", countryCode: "ES", bbox: [2.05, 41.32, 2.23, 41.47] },
+  {
+    slug: "london",
+    name: "London",
+    countryCode: "GB",
+    area: boxArea([-0.51, 51.28, 0.33, 51.69]),
+    names: {
+      wikidataId: "Q84",
+      byLanguage: completeNames(
+        { ar: "لندن", es: "Londres", fr: "Londres", hi: "लंदन", it: "Londra", ja: "ロンドン", pl: "Londyn", pt: "Londres", ru: "Лондон", tr: "Londra", uk: "Лондон", "zh-Hans": "伦敦", "zh-Hant": "倫敦" },
+        "London",
+      ),
+    },
+  },
+  {
+    slug: "barcelona",
+    name: "Barcelona",
+    countryCode: "ES",
+    area: boxArea([2.05, 41.32, 2.23, 41.47]),
+    names: {
+      wikidataId: "Q1492",
+      byLanguage: completeNames({ ar: "برشلونة", hi: "बार्सिलोना", ja: "バルセロナ", ru: "Барселона", uk: "Барселона", "zh-Hans": "巴塞罗那", "zh-Hant": "巴塞隆納" }, "Barcelona"),
+    },
+  },
 ];
 
 type Spot = typeof schema.spot.$inferInsert;

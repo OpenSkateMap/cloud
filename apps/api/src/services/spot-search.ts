@@ -14,8 +14,8 @@ export interface SpotSearch {
 // search_fold() leaves only letters, digits and spaces, so a word needs no LIKE escaping.
 const startsWord = (word: string) => sql`(' ' || ${spot.searchText}) like ${`% ${word}%`}`;
 const contains = (word: string) => sql`${spot.searchText} like ${`%${word}%`}`;
-const inCity = (word: string) =>
-  sql`${spot.cityId} = any(array(select ${city.id} from ${city} where (' ' || search_words(${city.name})) like ${`% ${word}%`}))`;
+const cityWords = sql`search_words(${city.name} || ' ' || coalesce((select string_agg(value, ' ') from jsonb_each_text(${city.names})), ''))`;
+const inCity = (word: string) => sql`${spot.cityId} = any(array(select ${city.id} from ${city} where (' ' || ${cityWords}) like ${`% ${word}%`}))`;
 
 /** A word of the title within the allowed typos of the term, as typed so far (`left`) or whole. */
 const nearlyMatches = ({ word, typos }: SearchTerm) =>
@@ -26,7 +26,7 @@ const nearlyMatches = ({ word, typos }: SearchTerm) =>
         where least(levenshtein_less_equal(${word}, title.word, ${typos}), levenshtein_less_equal(${word}, left(title.word, char_length(${word})), ${typos})) <= ${typos}
       ))`;
 
-/** 1: every word starts a word of the title or its city; 2: every word is in the title; 3: some word only with typos. */
+/** 1: every word starts a word of the title or of its city's name in any language; 2: every word is in the title; 3: some word only with typos. */
 const tier = (terms: readonly SearchTerm[]) =>
   sql`greatest(${sql.join(
     terms.map(({ word }) => sql`case when ${startsWord(word)} or ${inCity(word)} then 1 when ${contains(word)} then 2 else 3 end`),

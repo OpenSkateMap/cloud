@@ -49,7 +49,7 @@ through Hyperdrive, R2 for photos and clips. The iOS app's client is generated f
 | Website locally | `bun run --filter @openskatemap/web dev` (builds `.pages`, then `wrangler dev` serves the Worker and every page) |
 | Landing page locally | `bun run --filter @openskatemap/landing dev` (Astro with hot reload on port 4321, reachable from a phone on the same network) |
 | Local sample data | `bun run --filter @openskatemap/api seed:local` (localhost only): London and Barcelona, eight public spots, an admin rider; prints a session token |
-| Add or resize a city | `DATABASE_URL=... bun run --filter @openskatemap/api create-city --slug london --name London --country GB --bbox=-0.51,51.28,0.33,51.69` |
+| Add or resize a city | `DATABASE_URL=... bun run --filter @openskatemap/api create-city --slug london --name London --country GB --bbox=-0.51,51.28,0.33,51.69 --wikidata Q84` (`--wikidata` fills its names; without it a resize keeps them) |
 | Make someone a city editor | `DATABASE_URL=... bun run --filter @openskatemap/api grant-editor <user-id> <city-slug> [--revoke]` |
 | Import a list of spots | `DATABASE_URL=... bun run --filter @openskatemap/api import-spots <spots.json> --as <admin-user-id> [--dry-run]`: each row is submitted and approved as that admin through the review services (no notices); a row within 60 m of a published spot is skipped; re-runs are safe |
 | Add photos to spots | `DATABASE_URL=... CLOUDFLARE_API_TOKEN=... bun run --filter @openskatemap/api add-spot-photos <photos.json> --as <admin-user-id> [--dry-run]`: each row (`key`, `spotId`, a JPEG `file`, optional `credit`, optional `clip`: a video, cut from `clipStart` seconds) is uploaded to R2 with Wrangler and added to its spot as that admin's edit, approved at once (no notices); a spot's rows keep their order, so its first row becomes the cover of a spot without photos. A clip is encoded with ffmpeg (H.264 High, shorter side at most 720 px, at most 30 fps, about 1.8 Mbps, its first sound track as AAC at 64 kbps a channel, at most stereo, trimmed to the picture, no metadata, faststart, at most 16 s; a row under 3 s fails) and goes up with its photo; a photo the key already has live (its plain photo, or a clip encoded an earlier way, `EARLIER_CLIP_ENCODINGS`: the silent one) is replaced in place, so the spot keeps its order and cover. Rows already on the spot are left alone, so re-runs are safe; `--dry-run` prints what each row adds (+), replaces (~) or leaves (=) |
@@ -121,6 +121,12 @@ through Hyperdrive, R2 for photos and clips. The iOS app's client is generated f
   A photo insert, update or delete touches its spot, so the cover in the index row syncs too.
 - **Cities**: a spot belongs to the smallest city whose area contains it (`spot_city_for()`, SQL). `saveCity()`
   re-files spots when an area changes.
+- **City names**: `name` is English and the fallback; `names` holds one per app language (`CITY_LANGUAGES`), from the
+  city's Wikidata item (`wikidata_id`; CC0) by `wikidataCityNames()` (`src/lib/wikidata.ts`: Wikidata's `zh-hans`/`zh-hant`
+  labels, a missing one and English always `name`). `GET /v1/cities` carries them, so apps pick their language
+  offline; every other payload names a city by `cityId` (profiles' `editorOf` also by its English name). Search
+  matches every name. Server-written text (pushes, the share card) says `name`: the server doesn't know the reader's
+  language.
 - **Locations** use the `point` column type (`packages/db/src/schema/geo.ts`): it writes EWKT with SRID 4326 and
   reads hex EWKB. Drizzle's built-in `geometry` drops the SRID, which a 4326 column rejects. Distances in meters use
   `::geography` on both sides, which matches the expression index `spot_location_geography_gist`.
@@ -140,7 +146,7 @@ through Hyperdrive, R2 for photos and clips. The iOS app's client is generated f
   none of Cyrillic under `C`. A change to the rules is a migration that replaces the functions, then
   `ALTER TABLE spot ALTER COLUMN search_text SET EXPRESSION AS (search_words(title))` to recompute every row (a table
   rewrite fires no trigger, so versions stay put).
-- **Ranking:** 1, every query word starts a word of the name or its city's name; 2, every word is inside the name;
+- **Ranking:** 1, every query word starts a word of the name or of its city's name in any app language; 2, every word is inside the name;
   3, a word of 5–7 letters with one wrong letter or of 8+ with two (Levenshtein from `fuzzystrmatch`, against a whole
   word or the start of one); then distance from the optional point (`ST_DistanceSphere`), name, id. One `ORDER BY`
   with `LIMIT`, so typo matches show only when exact ones don't fill `limit`.

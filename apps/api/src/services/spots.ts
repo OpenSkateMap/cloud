@@ -161,6 +161,7 @@ export function listCities(db: Database): Promise<City[]> {
       id: city.id,
       slug: city.slug,
       name: city.name,
+      names: city.names,
       countryCode: city.countryCode,
       bounds: {
         minLatitude: bound("ST_YMin"),

@@ -1,5 +1,5 @@
 import { z } from "@hono/zod-openapi";
-import { SPOT_CONDITIONS, SPOT_KINDS, SPOT_REMOVAL_REASONS, SPOT_VISIBILITIES, VIDEO_PROVIDERS } from "@openskatemap/db/schema";
+import { CITY_LANGUAGES, SPOT_CONDITIONS, SPOT_KINDS, SPOT_REMOVAL_REASONS, SPOT_VISIBILITIES, VIDEO_PROVIDERS } from "@openskatemap/db/schema";
 
 export const SpotKindSchema = z.enum(SPOT_KINDS).openapi("SpotKind");
 export const SpotConditionSchema = z.enum(SPOT_CONDITIONS).openapi("SpotCondition");
@@ -177,7 +177,11 @@ export const CitySchema = z
   .object({
     id: z.string(),
     slug: z.string(),
-    name: z.string(),
+    name: z.string().openapi({ description: "In English; what to show in a language `names` doesn't have" }),
+    names: z.record(z.string(), z.string()).openapi({
+      description: `The name in each of the apps' languages (${CITY_LANGUAGES.join(", ")}), so an app picks its own offline; empty for a city whose names aren't filled yet`,
+      example: { de: "Sankt Petersburg", ru: "Санкт-Петербург", "zh-Hans": "圣彼得堡" },
+    }),
     countryCode: z.string(),
     bounds: z.object({ minLatitude: latitude, minLongitude: longitude, maxLatitude: latitude, maxLongitude: longitude }),
   })

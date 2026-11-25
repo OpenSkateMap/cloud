@@ -34,7 +34,8 @@ describe.skipIf(!e2eUrl)("spot search (database)", () => {
     await db.insert(city).values({
       id: cityId,
       slug: `e2e-${tag}`,
-      name: "Зеленогорск",
+      name: "Zelenogorsk",
+      names: { en: "Zelenogorsk", ru: "Зеленогорск", ja: "ゼレノゴルスク" },
       countryCode: "RU",
       area: sql`ST_Multi(ST_MakeEnvelope(29.6, 60.15, 29.8, 60.25, 4326))`,
     });
@@ -121,9 +122,10 @@ describe.skipIf(!e2eUrl)("spot search (database)", () => {
     expect(await found("борт")).toEqual([id("zaliv"), id("mirror-a"), id("mirror-b")]);
   });
 
-  test("a city's name finds its spots", async () => {
+  test("a city's name in any of the apps' languages finds its spots", async () => {
     expect(await found("зеленогорск")).toEqual([id("zaliv")]);
     expect(await found("zelenogorsk борт")).toEqual([id("zaliv")]);
+    expect(await found("ゼレノゴルスク")).toEqual([id("zaliv")]);
     expect(await found("зеленогорск зеркальный")).toEqual([]);
   });
 

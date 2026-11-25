@@ -1,8 +1,9 @@
 # Running the OpenSkateMap backend
 
-You need [bun](https://bun.sh) and Docker (or [OrbStack](https://orbstack.dev)).
+You need [mise](https://mise.jdx.dev), [bun](https://bun.sh) and Docker (or [OrbStack](https://orbstack.dev)).
 
 ```sh
+mise install                      # hk, and the Git hooks: lint on commit, `bun run check` on push
 bun install
 bun run db:up                     # Postgres + PostGIS on port 54330
 DATABASE_URL=postgres://openskatemap:openskatemap@localhost:54330/openskatemap bun run db:migrate

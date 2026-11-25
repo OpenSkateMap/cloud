@@ -1,0 +1,5 @@
+[tools]
+hk = "2.14.0"
+
+[hooks]
+postinstall = "hk install --mise"

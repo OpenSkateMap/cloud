@@ -13,7 +13,6 @@
     "check": "bun run lint && bun run typecheck && bun run test",
     "lint": "eslint --max-warnings 0 .",
     "lint:fix": "eslint --fix .",
-    "hooks:install": "git config --local core.hooksPath .githooks",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun run --filter '*' test",
     "db:up": "docker compose up -d --wait db",

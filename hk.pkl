@@ -1,0 +1,22 @@
+amends "package://github.com/jdx/hk/releases/download/v2.14.0/hk@2.14.0#/Config.pkl"
+
+hooks {
+  ["pre-commit"] {
+    fix = true
+    stash = "git"
+    steps {
+      ["eslint"] {
+        glob = List("**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.mjs", "**/*.cjs", "**/*.astro")
+        check = "bunx eslint --max-warnings 0 --no-warn-ignored {{files}}"
+        fix = "bunx eslint --max-warnings 0 --no-warn-ignored --fix {{files}}"
+      }
+    }
+  }
+  ["pre-push"] {
+    steps {
+      ["check"] {
+        check = "bun run check"
+      }
+    }
+  }
+}

@@ -346,7 +346,8 @@ through Hyperdrive, R2 for photos and clips. The iOS app's client is generated f
   (anywhere in the name, or as a whole word for everyday words like "palace"). Taken and refused are both `conflict`, "isn't available":
   the app shows one message. Add a word there when a report shows one got through. The display name stays on Better Auth's `user.name`. Emptying a field
   is `clear: [...]`, never `null`: the generated Swift client can't send an explicit null.
-- **Public profiles never include an email.** Stats: submissions, approvals, cities with an approved spot.
+- **Public profiles never include an email.** Stats: submissions, approvals, cities with an approved spot (the spot's
+  `city_id`, which `saveCity()` keeps current; a decided submission's own `city_id` never moves); `joinedAt` is `user.createdAt`.
 - **Blocks** (`user_block`): the blocker no longer sees the blocked person's name on spots (added by, photo
   credit), and the blocked person gets `not_found` for the blocker's profile.
 - **Deleting an account** (`deleteAccount`) cascades its votes away, and also deletes its unused uploads (the avatar, photos and clips never submitted),

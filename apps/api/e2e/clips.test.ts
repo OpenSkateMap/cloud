@@ -99,11 +99,16 @@ describe.skipIf(!e2eUrl)("clips (database)", () => {
     expect([stolen.status, stolen.body.error?.code]).toEqual([403, "forbidden"]);
   });
 
-  test("what isn't one short, silent, faststart H.264 MP4 is refused and stores nothing", async () => {
+  test("a clip with sound uploads with it", async () => {
+    const { status, body } = await putClip(crypto.randomUUID(), rider, fixture("clip-audio.mp4"));
+    expect([status, ClipUploadSchema.parse(body.data).durationMs]).toEqual([200, 2000]);
+  });
+
+  test("what isn't one short, faststart H.264 MP4 with at most one AAC sound is refused and stores nothing", async () => {
     const clipId = crypto.randomUUID();
     const answers = await Promise.all([
       putClip(clipId, rider, clip, "video/quicktime"),
-      putClip(clipId, rider, fixture("clip-audio.mp4")),
+      putClip(clipId, rider, fixture("clip-two-sounds.mp4")),
       putClip(clipId, rider, fixture("clip-17s.mp4")),
       putClip(clipId, rider, fixture("clip-moov-last.mp4")),
       putClip(clipId, rider, new Uint8Array(15 * 1024 * 1024 + 1)),

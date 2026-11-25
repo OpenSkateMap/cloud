@@ -21,6 +21,7 @@ interface Box {
 }
 
 interface Track {
+  readonly kind: "vide" | "soun";
   readonly trak: Box;
   readonly kept: Box[];
   readonly tkhd: Box;
@@ -97,7 +98,9 @@ function selfContained(file: File, minf: Box[]): Result<void, string> {
   });
 }
 
-function videoTrack(file: File, trak: Box): Result<Track, string> {
+const trackSize = (track: Track) => 8 + track.kept.reduce((total, box) => total + sizeOf(box), 0);
+
+function readTrack(file: File, trak: Box): Result<Track, string> {
   return safeTry(function* () {
     const parts = yield* boxesIn(file, trak.body, trak.end);
     const tkhd = yield* single(parts, "tkhd");
@@ -105,9 +108,8 @@ function videoTrack(file: File, trak: Box): Result<Track, string> {
     const media = yield* boxesIn(file, mdia.body, mdia.end);
     const hdlr = yield* single(media, "hdlr");
     const handler = hdlr.body + 12 <= hdlr.end ? fourcc(file.bytes, hdlr.body + 8) : "";
-    if (handler === "soun") return err("the clip has sound; send the clip without sound");
     // Timed metadata (`meta`, `mebx`) can carry locations; dropping its track would leave its samples in mdat.
-    if (handler !== "vide") return err("the clip has a track that isn't video; send video only");
+    if (handler !== "vide" && handler !== "soun") return err("the clip has a track that isn't video or sound; send only those");
     const mdhd = yield* single(media, "mdhd");
     if (mdhd.body + 4 + timesLength(file, mdhd) > mdhd.end) return err("malformed media header");
     const minf = yield* single(media, "minf");
@@ -117,10 +119,11 @@ function videoTrack(file: File, trak: Box): Result<Track, string> {
     const table = yield* boxesIn(file, stbl.body, stbl.end);
     const stsd = yield* single(table, "stsd");
     const codec = stsd.body + 16 <= stsd.end ? fourcc(file.bytes, stsd.body + 12) : "";
-    if (codec !== "avc1" && codec !== "avc3") return err("the video isn't H.264");
+    if (handler === "vide" && codec !== "avc1" && codec !== "avc3") return err("the video isn't H.264");
+    if (handler === "soun" && codec !== "mp4a") return err("the sound isn't AAC");
     const offsets = table.filter((box) => box.type === "stco" || box.type === "co64");
     if (offsets.length !== 1 || !offsets[0]) return err("the clip needs exactly one chunk offset table");
-    return ok({ trak, kept: parts.filter((box) => KEPT_IN_TRACK.has(box.type)), tkhd, mdhd, chunkOffsets: offsets[0] });
+    return ok({ kind: handler, trak, kept: parts.filter((box) => KEPT_IN_TRACK.has(box.type)), tkhd, mdhd, chunkOffsets: offsets[0] });
   });
 }
 
@@ -145,7 +148,7 @@ function shiftChunks(file: File, moov: Uint8Array, moovStart: number, table: Box
   return ok(undefined);
 }
 
-/** Rebuilds the clip as ftyp, the movie box with only what plays its one silent H.264 track, and the media data; recording times are zeroed. */
+/** Rebuilds the clip as ftyp, the movie box with only what plays its H.264 track and its AAC sound, if any, and the media data; recording times are zeroed. */
 export function cleanMp4(input: Uint8Array): Result<CleanMp4, string> {
   if (input.length < 8 || fourcc(input, 4) !== "ftyp") return err("not an MP4");
   const file: File = { bytes: input, data: new DataView(input.buffer, input.byteOffset, input.byteLength) };
@@ -163,20 +166,27 @@ export function cleanMp4(input: Uint8Array): Result<CleanMp4, string> {
     const mvhd = yield* single(movie, "mvhd");
     const durationMs = yield* movieDuration(file, mvhd);
     const tracks: Track[] = [];
-    for (const trak of movie.filter((box) => box.type === "trak")) tracks.push(yield* videoTrack(file, trak));
-    const [track] = tracks;
-    if (!track) return err("the clip has no video track");
-    if (tracks.length > 1) return err("the clip has more than one video track");
-    const { width, height } = yield* videoSize(file, track.tkhd);
+    for (const trak of movie.filter((box) => box.type === "trak")) tracks.push(yield* readTrack(file, trak));
+    const [video, ...otherVideo] = tracks.filter((track) => track.kind === "vide");
+    if (!video) return err("the clip has no video track");
+    if (otherVideo.length > 0) return err("the clip has more than one video track");
+    if (tracks.filter((track) => track.kind === "soun").length > 1) return err("the clip has more than one sound track");
+    const { width, height } = yield* videoSize(file, video.tkhd);
+    const trackAt = new Map(tracks.map((track) => [track.trak.start, track]));
 
     const kept = movie.filter((box) => KEPT_IN_MOVIE.has(box.type));
-    const trakSize = 8 + track.kept.reduce((total, box) => total + sizeOf(box), 0);
-    const moovSize = 8 + kept.reduce((total, box) => total + (box.type === "trak" ? trakSize : sizeOf(box)), 0);
+    const keptSize = (box: Box) => {
+      const track = trackAt.get(box.start);
+      return track ? trackSize(track) : sizeOf(box);
+    };
+    const moovSize = 8 + kept.reduce((total, box) => total + keptSize(box), 0);
     const shift = sizeOf(ftyp) + moovSize - mdat.start;
 
     const patched = input.slice(moov.start, moov.end);
-    for (const box of [mvhd, track.tkhd, track.mdhd]) patched.fill(0, box.body + 4 - moov.start, box.body + 4 + timesLength(file, box) - moov.start);
-    yield* shiftChunks(file, patched, moov.start, track.chunkOffsets, mdat, shift);
+    for (const box of [mvhd, ...tracks.flatMap((track) => [track.tkhd, track.mdhd])]) {
+      patched.fill(0, box.body + 4 - moov.start, box.body + 4 + timesLength(file, box) - moov.start);
+    }
+    for (const track of tracks) yield* shiftChunks(file, patched, moov.start, track.chunkOffsets, mdat, shift);
 
     const bytes = new Uint8Array(sizeOf(ftyp) + moovSize + sizeOf(mdat));
     const out = new DataView(bytes.buffer);
@@ -193,11 +203,12 @@ export function cleanMp4(input: Uint8Array): Result<CleanMp4, string> {
     copy(input.subarray(ftyp.start, ftyp.end));
     header(moovSize, "moov");
     for (const box of kept) {
-      if (box.type !== "trak") {
+      const track = trackAt.get(box.start);
+      if (!track) {
         copy(patched.subarray(box.start - moov.start, box.end - moov.start));
         continue;
       }
-      header(trakSize, "trak");
+      header(trackSize(track), "trak");
       for (const part of track.kept) copy(patched.subarray(part.start - moov.start, part.end - moov.start));
     }
     copy(input.subarray(mdat.start, mdat.end));

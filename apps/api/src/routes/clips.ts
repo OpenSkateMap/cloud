@@ -22,7 +22,7 @@ const uploadClipRoute = authedRoute({
   tags: ["contribute"],
   summary: "Upload one short clip to play in place of a photo",
   description:
-    "An MP4 with one silent H.264 video track, at most 16 s and 1920 px per side, its index (moov) before its media (faststart). The server keeps only what plays it (metadata and recording times are removed) and refuses sound or any other track. The id is chosen by the app; uploading the same id again returns the clip stored the first time.",
+    "An MP4 with one H.264 video track and at most one AAC sound track, at most 16 s and 1920 px per side, its index (moov) before its media (faststart). The server keeps only what plays them (metadata and recording times are removed) and refuses any other track. The id is chosen by the app; uploading the same id again returns the clip stored the first time.",
   request: {
     params: z.object({ clipId: z.uuid() }),
     body: { required: true, content: { "video/mp4": { schema: z.string().openapi({ format: "binary" }) } } },

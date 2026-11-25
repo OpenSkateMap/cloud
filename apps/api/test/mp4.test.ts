@@ -8,6 +8,7 @@ import { cleanMp4 } from "../src/lib/mp4.ts";
 // Made once with ffmpeg's testsrc at 96×64, 8 fps, libx264 High; see `clip-*` in this folder.
 const fixture = (name: string) => new Uint8Array(readFileSync(new URL(`./fixtures/${name}`, import.meta.url).pathname));
 const withMetadata = fixture("clip-metadata.mp4");
+const withSound = fixture("clip-audio.mp4");
 
 type Box = { type: string; start: number; body: number; end: number };
 const CONTAINERS = new Set(["moov", "trak", "mdia", "minf", "stbl", "edts", "dinf", "udta"]);
@@ -39,6 +40,19 @@ function chunkOffsets(bytes: Uint8Array) {
   const count = view(bytes).getUint32(stco.body + 4);
   return Array.from({ length: count }, (_, index) => view(bytes).getUint32(stco.body + 8 + index * 4));
 }
+
+const tracks = (bytes: Uint8Array) => {
+  const moov = find(bytes, ["moov"]);
+  return boxes(bytes, moov.body, moov.end).filter((box) => box.type === "trak");
+};
+const firstChunk = (bytes: Uint8Array, trak: Box) => view(bytes).getUint32(find(bytes, ["mdia", "minf", "stbl", "stco"], trak.body, trak.end).body + 8);
+const handler = (bytes: Uint8Array, trak: Box) => {
+  const hdlr = find(bytes, ["mdia", "hdlr"], trak.body, trak.end);
+  return String.fromCharCode(...bytes.subarray(hdlr.body + 8, hdlr.body + 12));
+};
+const recordingTimes = (bytes: Uint8Array, box: Box) => [view(bytes).getUint32(box.body + 4), view(bytes).getUint32(box.body + 8)];
+const trackHeaders = (bytes: Uint8Array) =>
+  tracks(bytes).flatMap((trak) => [find(bytes, ["tkhd"], trak.body, trak.end), find(bytes, ["mdia", "mdhd"], trak.body, trak.end)]);
 
 const contains = (bytes: Uint8Array, text: string) => Buffer.from(bytes).includes(text);
 
@@ -88,9 +102,42 @@ describe("cleanMp4", () => {
     }
   });
 
+  test("keeps one AAC sound track beside the video, its times zeroed and its chunks moved like the video's", () => {
+    const recorded = edited(withSound, (copy) => {
+      for (const box of trackHeaders(copy)) {
+        view(copy).setUint32(box.body + 4, 3_900_000_000);
+        view(copy).setUint32(box.body + 8, 3_900_000_001);
+      }
+    });
+    const clean = cleanMp4(recorded)._unsafeUnwrap();
+    expect([clean.width, clean.height, clean.durationMs]).toEqual([96, 64, 2000]);
+    expect(tracks(clean.bytes).map((trak) => handler(clean.bytes, trak))).toEqual(["vide", "soun"]);
+    expect(trackHeaders(clean.bytes).map((box) => recordingTimes(clean.bytes, box))).toEqual(Array(4).fill([0, 0]));
+    const [before, after] = [tracks(withSound), tracks(clean.bytes)];
+    for (const [index, trak] of after.entries()) {
+      const [old, moved] = [firstChunk(withSound, before[index]!), firstChunk(clean.bytes, trak)];
+      expect(clean.bytes.subarray(moved, moved + 32)).toEqual(withSound.subarray(old, old + 32));
+    }
+    expect(cleanMp4(clean.bytes)._unsafeUnwrap().bytes).toEqual(clean.bytes);
+  });
+
   test("leaves a clean clip as it is", () => {
     const clean = cleanMp4(withMetadata)._unsafeUnwrap().bytes;
     expect(cleanMp4(clean)._unsafeUnwrap().bytes).toEqual(clean);
+  });
+
+  test.skipIf(!Bun.which("ffprobe"))("ffmpeg decodes the cleaned clip's sound as well as its picture", async () => {
+    const folder = await mkdtemp(join(tmpdir(), "clean-mp4-"));
+    try {
+      const path = join(folder, "clean.mp4");
+      await writeFile(path, cleanMp4(withSound)._unsafeUnwrap().bytes);
+      const probe = Bun.spawnSync(["ffprobe", "-v", "error", "-show_entries", "stream=codec_name", "-of", "json", path]);
+      expect(JSON.parse(probe.stdout.toString()).streams).toEqual([{ codec_name: "h264" }, { codec_name: "aac" }]);
+      const decoded = Bun.spawnSync(["ffmpeg", "-v", "error", "-i", path, "-map", "0", "-f", "null", "-"]);
+      expect([decoded.exitCode, decoded.stderr.toString()]).toEqual([0, ""]);
+    } finally {
+      await rm(folder, { recursive: true, force: true });
+    }
   });
 
   test.skipIf(!Bun.which("ffprobe"))("ffprobe reads the cleaned clip's size and duration, and no tags", async () => {
@@ -119,9 +166,14 @@ describe("cleanMp4", () => {
     expect(cleanMp4(turned)._unsafeUnwrap()).toMatchObject({ width: 64, height: 96 });
   });
 
-  test("refuses sound, a late index, too long, too large, other codecs and tracks, and stray chunks", () => {
+  test("refuses a second sound, a late index, too long, too large, other codecs and tracks, and stray chunks", () => {
     const refusal = (bytes: Uint8Array) => cleanMp4(bytes)._unsafeUnwrapErr();
-    expect(refusal(fixture("clip-audio.mp4"))).toContain("without sound");
+    expect(refusal(fixture("clip-two-sounds.mp4"))).toBe("the clip has more than one sound track");
+    const opus = edited(withSound, (copy) => {
+      const sound = tracks(copy)[1]!;
+      copy.set(Buffer.from("Opus"), find(copy, ["mdia", "minf", "stbl", "stsd"], sound.body, sound.end).body + 12);
+    });
+    expect(refusal(opus)).toBe("the sound isn't AAC");
     expect(refusal(fixture("clip-moov-last.mp4"))).toContain("faststart");
     expect(refusal(fixture("clip-17s.mp4"))).toBe("the clip is longer than 16 s");
     const huge = edited(withMetadata, (copy) => view(copy).setUint32(find(copy, ["moov", "trak", "tkhd"]).body + 76, 4000 << 16));

@@ -10,6 +10,7 @@ import {
   IdSchema,
   NearbySpotSchema,
   SpotDetailsSchema,
+  SpotIndexRowSchema,
   SpotRemovalReasonSchema,
   SpotRemovalSchema,
   SyncPageSchema,
@@ -17,6 +18,7 @@ import {
 import { limitWrites } from "../middleware/rate-limit.ts";
 import { requireRole } from "../middleware/require-role.ts";
 import { restoreSpot, takeDownSpot } from "../services/curation.ts";
+import { searchSpots } from "../services/spot-search.ts";
 import { listCities, nearbySpots, spotDetails, syncSpots } from "../services/spots.ts";
 
 const SYNC_PAGE = 500;
@@ -74,6 +76,27 @@ const getNearbySpotsRoute = authedRoute({
   responses: answers(z.object({ spots: z.array(NearbySpotSchema) }), "GetNearbySpotsResponse", "Spots within the radius"),
 });
 
+const searchSpotsRoute = authedRoute({
+  method: "get",
+  path: "/v1/spots/search",
+  operationId: "searchSpots",
+  tags: ["spots"],
+  summary: "Published spots by name",
+  description:
+    "For spots the local index doesn't have yet (a sync still running); rows are what the sync sends. Names are compared in Latin letters (Cyrillic romanised, so `novokrest` finds Новокрестовская), ignoring case and accents, with ё as е and й as и or y. First spots where every word of `q` starts a word of the name or of its city's name; then names containing every word; then, to fill `limit`, names with a word one letter off (two from 8 letters) for words of 5 letters or more. Within each, nearest to `latitude`/`longitude` first when given, then by name.",
+  request: {
+    query: z
+      .object({
+        q: z.string().trim().min(1).max(100).openapi({ description: "What the rider typed", example: "novokrest" }),
+        latitude: queryNumber({ min: -90, max: 90 }).optional().openapi({ description: "With `longitude`: the map's centre, which breaks ties" }),
+        longitude: queryNumber({ min: -180, max: 180 }).optional(),
+        limit: queryNumber({ min: 1, max: 50, integer: true }).default(20),
+      })
+      .refine(({ latitude, longitude }) => (latitude === undefined) === (longitude === undefined), "Send both latitude and longitude, or neither"),
+  },
+  responses: answers(z.object({ spots: z.array(SpotIndexRowSchema) }), "SearchSpotsResponse", "The best matches first, at most `limit`"),
+});
+
 const getCitiesRoute = authedRoute({
   method: "get",
   path: "/v1/cities",
@@ -125,6 +148,11 @@ export const spots = createRouter()
   .openapi(getNearbySpotsRoute, async (c) => {
     const { latitude, longitude, radiusMeters } = c.req.valid("query");
     return c.json(success({ spots: await nearbySpots(c.var.database.db, latitude, longitude, radiusMeters) }), 200);
+  })
+  .openapi(searchSpotsRoute, async (c) => {
+    const { q, latitude, longitude, limit } = c.req.valid("query");
+    const near = latitude === undefined || longitude === undefined ? undefined : { latitude, longitude };
+    return c.json(success({ spots: await searchSpots(c.var.database.db, { query: q, limit, near }) }), 200);
   })
   .openapi(getSpotsRoute, async (c) => {
     const { ids } = c.req.valid("query");

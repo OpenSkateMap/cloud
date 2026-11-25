@@ -128,6 +128,29 @@ through Hyperdrive, R2 for photos and clips. The iOS app's client is generated f
   what apps filter on offline (obstacles); everything else comes from `GET /v1/spots?ids=` for the spots on screen.
   The sync and the collections snapshot select the same `indexColumns` (`src/services/spots.ts`).
 
+## Search
+
+- **`GET /v1/spots/search`** (`searchSpots`, `src/services/spot-search.ts`) finds published public spots by name for
+  the app's local search while its index is still syncing. Rows are the sync's `indexColumns`, so the app stores them
+  like synced ones.
+- **Names are compared in Latin letters.** `spot.search_text` is a stored generated column, `search_words(title)`
+  (SQL, migration 0033): Cyrillic romanised (й as both i and y, ё as e), lowercase by the built-in `pg_c_utf8`
+  whatever the database's collation, accents off (`unaccent`), anything but letters and digits a space. Queries go
+  through `search_fold()`, the same rules. Latin because pg_trgm sees only the letters the database's LC_CTYPE knows,
+  none of Cyrillic under `C`. A change to the rules is a migration that replaces the functions, then
+  `ALTER TABLE spot ALTER COLUMN search_text SET EXPRESSION AS (search_words(title))` to recompute every row (a table
+  rewrite fires no trigger, so versions stay put).
+- **Ranking:** 1, every query word starts a word of the name or its city's name; 2, every word is inside the name;
+  3, a word of 5–7 letters with one wrong letter or of 8+ with two (Levenshtein from `fuzzystrmatch`, against a whole
+  word or the start of one); then distance from the optional point (`ST_DistanceSphere`), name, id. One `ORDER BY`
+  with `LIMIT`, so typo matches show only when exact ones don't fill `limit`.
+- **Indexes:** the trigram GIN `spot_search_trgm` serves `like` and `<%`; typo candidates come from `<%` with
+  `pg_trgm.word_similarity_threshold` set for the transaction just under the weakest match the rule allows
+  (`typoThreshold`), and Levenshtein confirms them. `spot_city_idx` serves city matches. On 100,000 generated spots
+  (a busy laptop) most queries took 30–200 ms; a one- or two-letter word has no trigram, so it scans (one letter:
+  about 0.6 s).
+- `pg_trgm`, `unaccent` and `fuzzystrmatch` are on PlanetScale's list of extensions that need no superuser or restart.
+
 ## Paging
 
 - **Lists that can grow without bound page by keyset** (`src/lib/paging.ts`), never OFFSET or COUNT. Paged now:

@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { type SQL, sql } from "drizzle-orm";
 import { bigint, boolean, check, index, integer, pgSequence, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { user } from "./auth.ts";
 import { quoted } from "./checks.ts";
@@ -51,12 +51,18 @@ export const spot = pgTable(
     version: bigint("version", { mode: "number" }).notNull().default(0),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+    /** What search matches the title by (`search_words()`, migration 0033). */
+    searchText: text("search_text")
+      .notNull()
+      .generatedAlwaysAs((): SQL => sql`search_words(${spot.title})`),
   },
   (table) => [
     // Distances use `::geography` on both sides, so this is the only location index.
     index("spot_location_geography_gist").using("gist", sql`(${table.location}::geography)`),
     index("spot_version_idx").on(table.version),
     index("spot_created_by_idx").on(table.createdBy),
+    index("spot_search_trgm").using("gin", table.searchText.op("gin_trgm_ops")),
+    index("spot_city_idx").on(table.cityId),
     check("spot_title_length", sql`char_length(${table.title}) between 1 and 120`),
     check("spot_description_length", sql`char_length(${table.description}) <= 2000`),
     check("spot_visibility_known", sql`${table.visibility} in ('public', 'private')`),

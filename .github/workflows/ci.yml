@@ -37,25 +37,17 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
-      - run: bun run lint
-      - run: bun run typecheck
+      - name: Lint, typecheck, unit tests, the OpenAPI spec, the Worker bundle and the website build
+        run: bun run check
+      - name: The full tsc pass, until bun check has a track record
+        run: bun run typecheck:tsc
       - name: Create the restricted role the API runs as
         run: PGPASSWORD=openskatemap psql -h localhost -p 54330 -U openskatemap -d openskatemap -f docker/init-app-role.sql
       - run: bun run db:migrate
-      - run: bun run test
       - name: End-to-end against Postgres as the restricted app role
         env:
           E2E_DATABASE_URL: postgres://openskatemap_app:openskatemap_app@localhost:54330/openskatemap
         run: bun run --filter @openskatemap/api e2e
-      - name: The committed OpenAPI spec matches the routes
-        run: |
-          bun run openapi
-          git diff --exit-code apps/api/openapi.json
-      # Bundles the Worker the way a deploy does, so a bad import or binding fails the PR. Needs no credentials.
-      - name: The Worker bundles
-        run: bun run --filter @openskatemap/api build
-      - name: The website builds
-        run: bun run --filter @openskatemap/web build
 
   deploy:
     needs: check

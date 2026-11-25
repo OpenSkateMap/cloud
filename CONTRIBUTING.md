@@ -68,7 +68,7 @@ deleting an account deletes them too.
 
 - **One pull request does one thing.** Small ones get reviewed fastest.
 - **Follow [AGENTS.md](AGENTS.md)** and update it when your change makes it wrong.
-- **`bun run check`** (lint, typecheck, unit tests) and the end-to-end tests against the local database must pass,
+- **`bun run check`** (lint, typecheck, unit tests, the spec, the Worker bundle, the website build) and the end-to-end tests against the local database must pass,
   with no new warnings.
 - **Every operation needs a signed-in account** unless it's added to `src/lib/public-operations.ts` with the reason
   next to it; the contract test checks.

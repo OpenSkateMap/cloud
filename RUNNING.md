@@ -19,7 +19,7 @@ this server: see its [Running it locally](https://github.com/OpenSkateMap/ios#ru
 
 | Command | What it does |
 |---|---|
-| `bun run check` | Lint, typecheck and unit tests: what CI runs first |
+| `bun run check` | Lint, typecheck, unit tests, the OpenAPI spec, the Worker bundle and the website build, in parallel: what CI runs first |
 | `E2E_DATABASE_URL=postgres://openskatemap_app:openskatemap_app@localhost:54330/openskatemap bun run --filter @openskatemap/api e2e` | The end-to-end tests, against the local database |
 | `bun run openapi` | Regenerates `apps/api/openapi.json`; commit it with the change |
 | `bun run db:generate` | A migration from changes to `packages/db/src/schema` |

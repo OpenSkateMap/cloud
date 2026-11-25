@@ -3,14 +3,14 @@
   "private": true,
   "license": "AGPL-3.0-or-later",
   "type": "module",
-  "packageManager": "bun@1.4.4",
+  "packageManager": "bun@1.4.5",
   "workspaces": [
     "apps/*",
     "apps/web/landing",
     "packages/*"
   ],
   "scripts": {
-    "check": "bun run lint && bun run typecheck && bun run test",
+    "check": "bun run --parallel --no-exit-on-error lint typecheck test openapi:check build",
     "lint": "eslint --max-warnings 0 .",
     "lint:fix": "eslint --fix .",
     "typecheck": "bun run --filter '*' typecheck",
@@ -21,6 +21,8 @@
     "db:generate": "bun run --filter @openskatemap/db generate",
     "db:migrate": "bun run --filter @openskatemap/db migrate",
     "openapi": "bun run --filter @openskatemap/api openapi",
+    "openapi:check": "bun run --filter @openskatemap/api openapi:check",
+    "build": "bun run --filter @openskatemap/api --filter @openskatemap/web build",
     "dev": "bun run --filter @openskatemap/api dev",
     "deploy": "bun run apps/api/scripts/deploy.ts"
   },

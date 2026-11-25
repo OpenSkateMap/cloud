@@ -42,7 +42,7 @@ through Hyperdrive, R2 for photos and clips. The iOS app's client is generated f
 |---|---|
 | Install | `mise install` (hk, and it installs the Git hooks), then `bun install` |
 | Git hooks | hk (`hk.pkl`): a commit runs ESLint on the staged files (fixing what it can), a push runs `bun run check`. `mise install` installs them (`hk install --mise`); `hk run pre-push </dev/null` runs the push checks by hand, `--no-verify` skips a hook once |
-| Everything CI checks | `bun run check`, plus `E2E_DATABASE_URL=postgres://openskatemap_app:openskatemap_app@localhost:54330/openskatemap bun run --filter @openskatemap/api e2e` |
+| Everything CI checks | `bun run check` (lint, typecheck, unit tests, the OpenAPI spec matching the routes, the Worker bundle and the website build, in parallel), plus `E2E_DATABASE_URL=postgres://openskatemap_app:openskatemap_app@localhost:54330/openskatemap bun run --filter @openskatemap/api e2e` |
 | Local database | `bun run db:up` (OrbStack), then `DATABASE_URL=postgres://openskatemap:openskatemap@localhost:54330/openskatemap DATABASE_URL_APP=postgres://openskatemap_app:openskatemap_app@localhost:54330/openskatemap bun run db:migrate` (the second URL gives the app role production's timeouts) |
 | Run the Worker locally | Once: `cp apps/api/.dev.vars.example apps/api/.dev.vars` and set `BETTER_AUTH_SECRET` (`openssl rand -base64 32`); without it every authed route answers 500. Then `bun run dev` (`cf dev`; Hyperdrive uses the local database as `openskatemap_app`) |
 | Regenerate the spec | `bun run openapi` (commit `apps/api/openapi.json`) |

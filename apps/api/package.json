@@ -12,6 +12,7 @@
     "typecheck:tsc": "cf workers types && tsc -p tsconfig.json",
     "test": "bun test ./test",
     "openapi": "bun run scripts/openapi.ts",
+    "openapi:check": "bun run scripts/openapi.ts --check",
     "e2e": "bun test ./e2e",
     "create-city": "bun run scripts/create-city.ts",
     "file-cityless-spots": "bun run scripts/file-cityless-spots.ts",

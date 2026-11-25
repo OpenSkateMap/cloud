@@ -10,7 +10,8 @@
   "scripts": {
     "generate": "drizzle-kit generate",
     "migrate": "bun run src/migrate.ts",
-    "typecheck": "tsc -p tsconfig.json",
+    "typecheck": "bun check --no-script -p tsconfig.json",
+    "typecheck:tsc": "tsc -p tsconfig.json",
     "test": "bun test"
   },
   "dependencies": {

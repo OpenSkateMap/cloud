@@ -556,5 +556,6 @@ CLI. A skill's "do not change without approval" rules still apply.
 
 - The API is managed with the `cf` CLI (config in `apps/api/cloudflare.config.ts`). The website uses Wrangler (`apps/web/wrangler.jsonc`), as `cf` was too rough there.
 - TypeScript is pinned to 6.0: typescript-eslint does not support TypeScript 7 yet.
+- `typecheck` runs `bun check` (the same errors as `tsc`, in a fraction of the time; it skips `.astro` files, which `astro check` covers). `bun run typecheck:tsc` is the full `tsc` pass: run it before a merge until `bun check` has a track record.
 - bun refuses packages younger than 7 days (global supply-chain guard); ranges resolve to the newest allowed release,
   and the one beta (`@cloudflare/vite-plugin` v2, required by the API's `cf dev`/`cf build`) is pinned exactly.

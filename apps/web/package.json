@@ -7,7 +7,8 @@
     "dev": "bun run build && wrangler dev",
     "build": "bun run scripts/build-pages.ts",
     "deploy": "bun run build && wrangler deploy",
-    "typecheck": "wrangler types worker-configuration.d.ts > /dev/null && tsc -p tsconfig.json",
+    "typecheck": "wrangler types worker-configuration.d.ts > /dev/null && bun check --no-script -p tsconfig.json",
+    "typecheck:tsc": "wrangler types worker-configuration.d.ts > /dev/null && tsc -p tsconfig.json",
     "test": "bun test ./test"
   },
   "devDependencies": {

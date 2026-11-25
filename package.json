@@ -14,6 +14,7 @@
     "lint": "eslint --max-warnings 0 .",
     "lint:fix": "eslint --fix .",
     "typecheck": "bun run --filter '*' typecheck",
+    "typecheck:tsc": "bun run --filter '*' typecheck:tsc",
     "test": "bun run --filter '*' test",
     "db:up": "docker compose up -d --wait db",
     "db:down": "docker compose down",

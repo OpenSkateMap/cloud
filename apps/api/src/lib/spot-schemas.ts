@@ -83,6 +83,7 @@ export const SpotPhotoSchema = z
     thumbhash: z.string(),
     credit: z.string().nullable().openapi({ description: "Who took it: the photographer named by the submitter, else the uploader's name; null if unknown" }),
     position: z.int(),
+    createdAt: z.iso.datetime().openapi({ description: "When it was added to the spot" }),
     clip: SpotPhotoClipSchema.optional(),
   })
   .openapi("SpotPhoto");

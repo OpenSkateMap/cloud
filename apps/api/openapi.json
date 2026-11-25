@@ -745,6 +745,11 @@
           "position": {
             "type": "integer"
           },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When it was added to the spot"
+          },
           "clip": {
             "$ref": "#/components/schemas/SpotPhotoClip"
           }
@@ -756,7 +761,8 @@
           "height",
           "thumbhash",
           "credit",
-          "position"
+          "position",
+          "createdAt"
         ]
       },
       "SpotPhotoClip": {

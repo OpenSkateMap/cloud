@@ -85,6 +85,7 @@ export async function spotDetails(db: Database, viewerId: string, ids: readonly 
             uploaderName: uploader.name,
             uploaderBlocked: hasBlocked(viewerId, spotPhoto.uploadedBy),
             position: spotPhoto.position,
+            addedAt: spotPhoto.createdAt,
             clip: { key: clipUpload.r2Key, width: clipUpload.width, height: clipUpload.height, durationMs: clipUpload.durationMs },
           })
           .from(spotPhoto)
@@ -101,9 +102,10 @@ export async function spotDetails(db: Database, viewerId: string, ids: readonly 
       ...row,
       ...location,
       addedBy: addedByBlocked ? null : addedBy,
-      photos: (photosBySpot.get(row.id) ?? []).map(({ spotId: _, namedCredit, uploaderName, uploaderBlocked, clip, ...photo }) => ({
+      photos: (photosBySpot.get(row.id) ?? []).map(({ spotId: _, namedCredit, uploaderName, uploaderBlocked, addedAt, clip, ...photo }) => ({
         ...photo,
         credit: namedCredit ?? (uploaderBlocked ? null : uploaderName),
+        createdAt: addedAt.toISOString(),
         ...(clip === null ? {} : { clip }),
       })),
       videos: videosBySpot.get(row.id) ?? [],

@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { openDatabase } from "@openskatemap/db";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -15,6 +16,8 @@ const OVERRIDES: Record<string, number> = {
   Q84: 175342, // London: Greater London, not the ceremonial county
 };
 const MAX_AREA_KM2 = 10_000;
+// Wikidata labels some items as the administration ("Monterrey Municipality"); OpenStreetMap's English name rarely does.
+const ADMINISTRATIVE_NAME = /\b(Municipality|Municipal|County|Regency|Prefecture|Province|Urban Okrug|City of)\b/;
 const NESTED_SHARE = 0.9;
 const BATCH = 50;
 
@@ -39,10 +42,27 @@ interface Candidate {
   readonly name: string | undefined;
 }
 
+// The query service allows a minute of query time a minute and answers 429 past it; its answer is kept for a rerun.
+const sparqlCache = `${tmpdir()}/openskatemap-preload-sparql.json`;
+const SparqlCacheSchema = z.record(z.string(), z.unknown());
+
 async function sparql(query: string): Promise<Candidate[]> {
-  const response = await fetch(`https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(query)}`, { headers });
-  if (!response.ok) throw new Error(`Wikidata's query service answered ${response.status}`);
-  return SparqlSchema.parse(await response.json()).results.bindings.map((row) => ({
+  const cache = SparqlCacheSchema.parse(JSON.parse(await readFile(sparqlCache, "utf8").catch(() => "{}")));
+  let answer = cache[query];
+  for (let attempt = 1; answer === undefined; attempt += 1) {
+    const response = await fetch(`https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(query)}`, { headers });
+    if (response.ok) {
+      answer = await response.json();
+      await writeFile(sparqlCache, JSON.stringify({ ...cache, [query]: answer }));
+      break;
+    }
+    await response.body?.cancel();
+    if (attempt === 4 || (response.status !== 429 && response.status < 500)) throw new Error(`Wikidata's query service answered ${response.status}`);
+    const waitSeconds = Number(response.headers.get("retry-after")) || attempt * 30;
+    console.log(`  Wikidata's query service answered ${response.status}; asking again in ${waitSeconds} s`);
+    await pause(waitSeconds * 1000);
+  }
+  return SparqlSchema.parse(answer).results.bindings.map((row) => ({
     item: row.item.value.split("/").at(-1) ?? row.item.value,
     population: Number(row.population.value),
     country: row.country?.value,
@@ -52,34 +72,54 @@ async function sparql(query: string): Promise<Candidate[]> {
 
 const OverpassSchema = z.object({ elements: z.array(z.object({ id: z.int(), tags: z.record(z.string(), z.string()).default({}) })) });
 
+// What Overpass answered for each item is kept for a rerun, so an outage halfway costs only the items after it.
+const overpassCache = `${tmpdir()}/openskatemap-preload-overpass.json`;
+const OverpassCacheSchema = z.record(z.string(), z.array(z.int()));
+
+async function overpass(items: string[]): Promise<Map<string, number[]> | undefined> {
+  // A union of exact tags uses Overpass's tag index; a regex over the tag scans every relation.
+  const query = `[out:json][timeout:180];(${items.map((item) => `rel[boundary=administrative][wikidata="${item}"];`).join("")});out tags;`;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const response = await fetch("https://overpass-api.de/api/interpreter", {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ data: query }),
+    });
+    if (response.ok) {
+      const tagged = new Map(items.map((item): [string, number[]] => [item, []]));
+      for (const { id, tags } of OverpassSchema.parse(await response.json()).elements) {
+        const item = tags.wikidata;
+        if (item && tagged.has(item)) tagged.get(item)!.push(id);
+      }
+      await pause(2000);
+      return tagged;
+    }
+    await response.body?.cancel();
+    console.log(`  Overpass answered ${response.status}`);
+    if (attempt < 3) await pause(attempt * 20_000);
+  }
+  return undefined;
+}
+
+// A batch Overpass keeps failing (its gateway gives up on a slow query) is asked again in halves.
+async function relationsOf(items: string[]): Promise<Map<string, number[]>> {
+  const answer = await overpass(items);
+  if (answer) return answer;
+  if (items.length <= 5) throw new Error(`Overpass keeps failing for ${items.join(", ")}`);
+  const half = Math.ceil(items.length / 2);
+  return new Map([...(await relationsOf(items.slice(0, half))), ...(await relationsOf(items.slice(half)))]);
+}
+
 /** Every administrative relation that carries one of the items as its own `wikidata` tag. */
 async function relationsTagged(items: string[]): Promise<Map<string, number[]>> {
-  const tagged = new Map<string, number[]>();
-  for (let start = 0; start < items.length; start += BATCH) {
-    const batch = items.slice(start, start + BATCH);
-    // A union of exact tags uses Overpass's tag index; a regex over the tag scans every relation.
-    const query = `[out:json][timeout:180];(${batch.map((item) => `rel[boundary=administrative][wikidata="${item}"];`).join("")});out tags;`;
-    for (let attempt = 1; ; attempt += 1) {
-      const response = await fetch("https://overpass-api.de/api/interpreter", {
-        method: "POST",
-        headers: { ...headers, "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ data: query }),
-      });
-      if (response.ok) {
-        for (const { id, tags } of OverpassSchema.parse(await response.json()).elements) {
-          const item = tags.wikidata;
-          if (item) tagged.set(item, [...(tagged.get(item) ?? []), id]);
-        }
-        break;
-      }
-      await response.body?.cancel();
-      if (attempt === 4) throw new Error(`Overpass answered ${response.status} for items ${start}–${start + batch.length}`);
-      await pause(attempt * 10_000);
-    }
-    console.log(`  Overpass: ${Math.min(start + BATCH, items.length)} of ${items.length} items`);
-    await pause(2000);
+  const known = OverpassCacheSchema.parse(JSON.parse(await readFile(overpassCache, "utf8").catch(() => "{}")));
+  const asking = items.filter((item) => !(item in known));
+  for (let start = 0; start < asking.length; start += BATCH) {
+    for (const [item, relations] of await relationsOf(asking.slice(start, start + BATCH))) known[item] = relations;
+    await writeFile(overpassCache, JSON.stringify(known));
+    console.log(`  Overpass: ${Math.min(start + BATCH, asking.length)} of ${asking.length} items`);
   }
-  return tagged;
+  return new Map(items.flatMap((item): [string, number[]][] => (known[item]?.length ? [[item, known[item]]] : [])));
 }
 
 async function boundaries(relations: number[]): Promise<Map<number, RelationPlace>> {
@@ -103,6 +143,7 @@ if (missing.length > 0) {
       OPTIONAL { ?item rdfs:label ?label . FILTER(LANG(?label) = "en") } } GROUP BY ?item`)),
   );
 }
+candidates.sort((a, b) => a.item.localeCompare(b.item));
 console.log(`${candidates.length} candidates from Wikidata`);
 
 const tagged = await relationsTagged(candidates.map((row) => row.item));
@@ -131,7 +172,7 @@ try {
   const areas = await db.execute<{ relation: string; km2: number }>(sql`select relation, ST_Area(geom::geography) / 1e6 as km2 from preload_relation`);
   measured = new Map(areas.rows.map((row) => [Number(row.relation), Number(row.km2)]));
   const chosenByHand = Object.values(OVERRIDES);
-  await db.execute(sql`delete from preload_relation where ST_Area(geom::geography) / 1e6 > ${MAX_AREA_KM2} and relation <> all(${chosenByHand})`);
+  await db.execute(sql`delete from preload_relation where ST_Area(geom::geography) / 1e6 > ${MAX_AREA_KM2} and relation not in (${sql.join(chosenByHand.map((relation) => sql`${relation}`), sql`, `)})`);
   const pairs = await db.execute<{ inner: string; outer: string }>(sql`
     select a.relation as inner, b.relation as outer from preload_relation a join preload_relation b on a.relation <> b.relation and a.geom && b.geom
     where ST_Area(ST_Intersection(a.geom, b.geom)::geography) >= ${NESTED_SHARE} * ST_Area(a.geom::geography)
@@ -160,9 +201,9 @@ for (const row of candidates) {
   const [best] = small.toSorted((a, b) => Number(b.place.linkedPlace === "city") - Number(a.place.linkedPlace === "city") || b.areaKm2 - a.areaKm2);
   const entry = {
     ...label(row),
-    // The place's own country, as OpenStreetMap maps it (Hong Kong is HK, not Wikidata's CN), as create-city has it.
+    // The country Nominatim gives the place, which is what preloading stores.
     country: best!.place.place.countryCode,
-    name: row.name ?? best!.place.place.name,
+    name: row.name && !(ADMINISTRATIVE_NAME.test(row.name) && !ADMINISTRATIVE_NAME.test(best!.place.place.name)) ? row.name : best!.place.place.name,
     relation: best!.relation,
     areaKm2: Math.round(best!.areaKm2 * 10) / 10,
     linkedCity: best!.place.linkedPlace === "city",

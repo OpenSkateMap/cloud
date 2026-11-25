@@ -19,7 +19,8 @@ if (!url || !entries.success) {
 const database = await openDatabase(url);
 try {
   let creating = 0;
-  for (const entry of entries.data) {
+  // Smallest first: a city keeps its whole area, and a wider place that overlaps it takes only what's left.
+  for (const entry of entries.data.toSorted((a, b) => a.areaKm2 - b.areaKm2)) {
     const place = `${entry.name} (${entry.country}, ${entry.wikidata}, relation/${entry.relation})`;
     if (values["dry-run"]) {
       const known = await preloadedCity(database.db, entry);

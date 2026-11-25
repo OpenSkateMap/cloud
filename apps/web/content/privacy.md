@@ -1,6 +1,6 @@
 # Privacy policy
 
-*Last updated 15 November 2026. Questions: {{contact}}.*
+*Last updated 25 November 2026. Questions: {{contact}}.*
 
 ## What OpenSkateMap is
 
@@ -11,7 +11,7 @@ OpenSkateMap is a map of skate spots, curated by local skaters. You sign in with
 - **Your Sign in with Apple details**: the identifier Apple gives us for your account, your email address (often a private relay address that Apple forwards to you), and your name if you choose to share it. *Why:* to create your account and sign you in. We never see your Apple Account password.
 - **Your profile**: display name, @username, bio, social handles (Instagram, TikTok, YouTube, X, Telegram, website) and avatar photo. *Why:* so other skaters can see who added a spot and find you. You can change it any time in Edit Profile.
 - **The spots you submit**: the title, kind, condition, obstacles and description, the spot's position on the map, and a note to the curator. *Why:* so a curator can review the spot and, once it's approved, show it on the map. Your note is only for curators and is never shown on the spot.
-- **The photos you add**, and any short clip that plays in place of one: the image or clip, who took it (the credit you enter), whether you have the photographer's permission, and a link to where you found it, if you give one. Your phone removes the photo's location and camera details before upload, and our server re-encodes every photo so only the image is left; of a clip it keeps only the video and its sound. *Why:* to show the spot. Photos and clips you upload but never use (in a submission, as your avatar or as a collection's picture) are deleted after a week.
+- **The photos you add**, and any short clip that plays in place of one: the image or clip, who took it (the credit you enter), whether you have the photographer's permission, and a link to where you found it, if you give one. Your phone removes the photo's location and camera details before upload, and our server re-encodes every photo so only the image is left. Of a clip it keeps only the picture and its sound, which plays when someone watches the clip full screen. *Why:* to show the spot. Photos and clips you upload but never use (in a submission, as your avatar or as a collection's picture) are deleted after a week.
 - **Your collections**: their names and descriptions, the spots in them, whether each one is public or private, the people you share them with, and the email addresses you invite (kept until that person opens the app or you cancel the invite). A spot you add to one of your private collections isn't reviewed by a curator and never goes on the map. *Why:* to keep your collections and share them with the people you choose. How many people keep a spot in a collection also helps rank that spot; nobody sees who.
 - **Your votes on spots**: whether you voted each spot up or down. *Why:* to show how skaters rate each spot, and to recommend spots. Others see only the totals, never who voted.
 - **Curators' decisions**: who approved, edited or declined each submission, when, and the reason they gave, and the reason an admin gave for taking a spot down. *Why:* to show you what happened to your submissions and to keep a record of every change to the map. Only admins can see which curator made a decision.

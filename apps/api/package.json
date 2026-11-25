@@ -13,6 +13,8 @@
     "openapi": "bun run scripts/openapi.ts",
     "e2e": "bun test ./e2e",
     "create-city": "bun run scripts/create-city.ts",
+    "file-cityless-spots": "bun run scripts/file-cityless-spots.ts",
+    "preload-cities": "bun run scripts/preload-cities.ts",
     "seed:local": "bun run scripts/seed-local.ts",
     "grant-editor": "bun run scripts/grant-editor.ts",
     "import-spots": "bun run scripts/import-spots.ts",

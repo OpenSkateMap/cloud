@@ -4,6 +4,7 @@ import { user } from "./auth.ts";
 import { quoted } from "./checks.ts";
 import { clipUpload } from "./clips.ts";
 import { multiPolygon, point } from "./geo.ts";
+import { osmPlace } from "./places.ts";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).defaultNow().notNull();
 
@@ -31,6 +32,10 @@ export const city = pgTable(
     names: jsonb("names").$type<CityNames>().notNull().default({}),
     /** The Wikidata item the names come from. */
     wikidataId: text("wikidata_id"),
+    /** The OpenStreetMap place a city made by a lookup came from; null for a hand-drawn one. */
+    osmPlaceId: text("osm_place_id")
+      .unique()
+      .references(() => osmPlace.id),
     countryCode: text("country_code").notNull(),
     area: multiPolygon("area").notNull(),
     createdAt: createdAt(),

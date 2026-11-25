@@ -1,8 +1,7 @@
 import type { Database } from "@openskatemap/db";
 import { city, type CityNames } from "@openskatemap/db/schema";
 import { type SQL, sql } from "drizzle-orm";
-
-export type Bbox = readonly [west: number, south: number, east: number, north: number];
+import type { Bbox } from "../lib/nominatim.ts";
 
 export interface CityInput {
   readonly slug: string;

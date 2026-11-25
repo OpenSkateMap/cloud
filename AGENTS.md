@@ -50,6 +50,8 @@ through Hyperdrive, R2 for photos and clips. The iOS app's client is generated f
 | Landing page locally | `bun run --filter @openskatemap/landing dev` (Astro with hot reload on port 4321, reachable from a phone on the same network) |
 | Local sample data | `bun run --filter @openskatemap/api seed:local` (localhost only): London and Barcelona, eight public spots, an admin rider; prints a session token |
 | Add or resize a city | `DATABASE_URL=... bun run --filter @openskatemap/api create-city --slug london --name London --country GB --bbox=-0.51,51.28,0.33,51.69 --wikidata Q84` (`--wikidata` fills its names; without it a resize keeps them) |
+| File spots outside every city | `DATABASE_URL=... bun run --filter @openskatemap/api file-cityless-spots`: `fileSpot()` for every published public spot without a city (retries, backfills), one Nominatim request a second at most |
+| Make big cities ahead of their spots | `DATABASE_URL=... bun run --filter @openskatemap/api preload-cities <entries.json>` (a list of `{ wikidata, relation }`): each relation's boundary from Nominatim's `lookup` and its names, saved like an automatic city (hidden until it has a spot); one already made from that relation or Wikidata item stays as it is. Run it after every hand-drawn city has its `wikidata_id` |
 | Make someone a city editor | `DATABASE_URL=... bun run --filter @openskatemap/api grant-editor <user-id> <city-slug> [--revoke]` |
 | Import a list of spots | `DATABASE_URL=... bun run --filter @openskatemap/api import-spots <spots.json> --as <admin-user-id> [--dry-run]`: each row is submitted and approved as that admin through the review services (no notices); a row within 60 m of a published spot is skipped; re-runs are safe |
 | Add photos to spots | `DATABASE_URL=... CLOUDFLARE_API_TOKEN=... bun run --filter @openskatemap/api add-spot-photos <photos.json> --as <admin-user-id> [--dry-run]`: each row (`key`, `spotId`, a JPEG `file`, optional `credit`, optional `clip`: a video, cut from `clipStart` seconds) is uploaded to R2 with Wrangler and added to its spot as that admin's edit, approved at once (no notices); a spot's rows keep their order, so its first row becomes the cover of a spot without photos. A clip is encoded with ffmpeg (H.264 High, shorter side at most 720 px, at most 30 fps, about 1.8 Mbps, its first sound track as AAC at 64 kbps a channel, at most stereo, trimmed to the picture, no metadata, faststart, at most 16 s; a row under 3 s fails) and goes up with its photo; a photo the key already has live (its plain photo, or a clip encoded an earlier way, `EARLIER_CLIP_ENCODINGS`: the silent one) is replaced in place, so the spot keeps its order and cover. Rows already on the spot are left alone, so re-runs are safe; `--dry-run` prints what each row adds (+), replaces (~) or leaves (=) |
@@ -121,6 +123,24 @@ through Hyperdrive, R2 for photos and clips. The iOS app's client is generated f
   A photo insert, update or delete touches its spot, so the cover in the index row syncs too.
 - **Cities**: a spot belongs to the smallest city whose area contains it (`spot_city_for()`, SQL). `saveCity()`
   re-files spots when an area changes.
+- **Automatic cities** (`src/services/city-places.ts`, Ertem 2026-11-25): a public spot submitted outside every city
+  (or an edit moving one there; never a private spot) has its place looked up off the request (`findCityAfter`,
+  `waitUntil`): Nominatim's `reverse` at zoom 10 for a city, town or municipality, and where that's finer (a suburb,
+  village…) zoom 8's regency-level place (`findCityPlace`, `src/lib/nominatim.ts`; Kuta, Bali gives Badung). The
+  place is stored in `osm_place` (its simplified boundary, else its box; names from its `name:<language>` tags first,
+  then its Wikidata labels, then its English name) and linked in `submission_place`, a table of its own so the
+  submission's `updated_at` (the reviewer's `seenUpdatedAt`) never moves. Approval makes the city from the stored place
+  inside its transaction (`fileFromStoredPlace`, a savepoint, no network), so the spot is filed in the same commit;
+  without one (an admin's own spot, a lookup still running or failed) `fileSpot()` runs after the commit. A rejected
+  submission makes no city. **Automatic cities never change an existing one**: insert only, a free slug (`-2`…),
+  the area is the place's minus every city's, and a place whose OpenStreetMap or Wikidata id a city has makes none;
+  hand-drawn cities (`create-city`) are how places are patched. **Nominatim is asked once per place, ever**: before
+  any request, a city containing the point, then a stored place containing it, then a miss remembered for its 0.01°
+  cell (`place_miss`, 21 days: no city there, or the point outside the simplified boundary) answer instead. Requests
+  take the one `lookup_lease` row (all Workers; held a second past each request, OpenStreetMap's limit), and a lookup
+  waiting for it checks the stores again, so concurrent submissions in one new place make one request. The app gets
+  a `PlaceLookup` from `createApp()`; e2e passes fixtures (or none), so tests never call out. `GET /v1/cities` lists
+  only cities with a published public spot, so preloaded and freshly made ones appear with their first spot.
 - **City names**: `name` is English and the fallback; `names` holds one per app language (`CITY_LANGUAGES`), from the
   city's Wikidata item (`wikidata_id`; CC0) by `wikidataCityNames()` (`src/lib/wikidata.ts`: Wikidata's `zh-hans`/`zh-hant`
   labels, a missing one and English always `name`). `GET /v1/cities` carries them, so apps pick their language

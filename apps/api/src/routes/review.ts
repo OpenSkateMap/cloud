@@ -7,6 +7,7 @@ import { answers, authedRoute, jsonBody } from "../lib/routes.ts";
 import { IdSchema } from "../lib/spot-schemas.ts";
 import { RejectReasonSchema, ReviewQueueSchema, SpotEditsSchema, SubmissionSchema } from "../lib/submission-schemas.ts";
 import { limitWrites } from "../middleware/rate-limit.ts";
+import { findCityAfter } from "../services/city-places.ts";
 import { notifyAfter, reviewResultNotice, videoResultNotice } from "../services/notifications.ts";
 import { approveSubmission, rejectSubmission, reviewQueue, undoDecision } from "../services/review.ts";
 import { approveVideo, rejectVideo, undoVideoDecision } from "../services/video-review.ts";
@@ -155,6 +156,7 @@ export const review = createRouter()
     const decided = await approveSubmission(c.var.database.db, c.var.user, submissionId, c.req.valid("json"));
     if (decided.isErr()) return respondError(c, decided.error);
     trackDecision(c, decided.value.kind === "edit_spot" ? "edit" : "spot", "approved", decided.value);
+    findCityAfter(c, decided.value);
     await notifyAfter(c, (db) => reviewResultNotice(db, decided.value));
     return c.json(success(decided.value), 200);
   })

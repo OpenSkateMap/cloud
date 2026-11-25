@@ -253,6 +253,13 @@
       "when": 1795597695750,
       "tag": "0035_city_names",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1795599046161,
+      "tag": "0036_automatic_cities",
+      "breakpoints": true
     }
   ]
 }

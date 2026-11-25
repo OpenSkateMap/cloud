@@ -1,7 +1,7 @@
-import { type Database, openDatabase } from "@openskatemap/db";
+import type { Database } from "@openskatemap/db";
 import { createApp } from "./app.ts";
 import { parsePushSettings, type PushMessage, sendPushes } from "./lib/buzzkit.ts";
-import { logFailure } from "./lib/log.ts";
+import { onDatabase } from "./lib/on-database.ts";
 import { SCHEDULES } from "./schedules.ts";
 import { newSpotsDigest, reviewEscalations } from "./services/notifications.ts";
 import { eraseElsewhere } from "./services/account.ts";
@@ -10,19 +10,6 @@ import { deleteSweptUploads, sweep } from "./services/housekeeping.ts";
 import { refreshSpotScores } from "./services/spot-score.ts";
 
 const app = createApp();
-
-/** One connection for the job, closed before anything slower (pushes, R2) happens; undefined when it failed. */
-async function onDatabase<T>(env: Env, label: string, job: (db: Database) => Promise<T>): Promise<T | undefined> {
-  const database = await openDatabase(env.HYPERDRIVE.connectionString);
-  try {
-    return await job(database.db);
-  } catch (error) {
-    logFailure(`${label} failed`, error);
-    return undefined;
-  } finally {
-    await database.close();
-  }
-}
 
 async function pushJob(env: Env, label: string, compose: (db: Database) => Promise<PushMessage[]>) {
   const push = parsePushSettings(env);

@@ -1,6 +1,6 @@
 import type { Database } from "@openskatemap/db";
 import { city, clipUpload, spot, spotPhoto, submission, user } from "@openskatemap/db/schema";
-import { and, asc, eq, gt, inArray, max, type SQL, sql } from "drizzle-orm";
+import { and, asc, eq, exists, gt, inArray, max, type SQL, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { City, NearbySpot, SpotCard, SpotDetails, SyncPage } from "../lib/spot-schemas.ts";
 import { canSeeSpot } from "./collections.ts";
@@ -171,6 +171,8 @@ export function listCities(db: Database): Promise<City[]> {
       },
     })
     .from(city)
+    // Big cities are made ahead of their first spot; apps see a city once it has one.
+    .where(exists(db.select({ one: sql`1` }).from(spot).where(and(eq(spot.cityId, city.id), eq(spot.status, "published"), eq(spot.visibility, "public")))))
     .orderBy(asc(city.name));
 }
 

@@ -103,7 +103,8 @@ const getCitiesRoute = authedRoute({
   operationId: "getCities",
   tags: ["spots"],
   summary: "Every city with curated spots",
-  responses: answers(z.object({ cities: z.array(CitySchema) }), "GetCitiesResponse", "All cities, by name"),
+  description: "Only cities with at least one published public spot: big cities are made ahead of their first spot and stay out of this list until then.",
+  responses: answers(z.object({ cities: z.array(CitySchema) }), "GetCitiesResponse", "Every city with a published public spot, by name"),
 });
 
 const spotParams = z.object({ spotId: IdSchema });

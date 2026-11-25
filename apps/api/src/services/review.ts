@@ -5,6 +5,7 @@ import type { CurrentUser } from "../env.ts";
 import type { AppError } from "../lib/errors.ts";
 import { type Attempt, err, ok, type Result, safeTry } from "../lib/result.ts";
 import type { ReviewQueue, SpotEdits, SpotSnapshot, Submission } from "../lib/submission-schemas.ts";
+import { fileFromStoredPlace } from "./city-places.ts";
 import { applyEdit, editRemovedPhotoCount, isEditableSpot, reviewableEdit, revertEdit, type SpotValues, withChanges } from "./spot-edits.ts";
 import { nearbySubmissions } from "./spots.ts";
 import { isPrivateSubmission, loadSubmissions, pickPhotos, submissionPhotoRows, uploadedPhoto } from "./submissions.ts";
@@ -216,6 +217,7 @@ export async function approveSubmission(
     if (row.kind === "edit_spot") {
       yield* reviewableEdit(row, wholePhotoList === true);
       const { spotId, ...replaced } = yield* await applyEdit(tx, submissionId, row, edits, checkPlace);
+      if (spotId !== null) await fileFromStoredPlace(tx, spotId);
       await tx
         .update(submission)
         .set({ status: "approved", reviewedBy: actor.id, reviewedAt: new Date(), rejectReason: null })
@@ -253,6 +255,7 @@ export async function approveSubmission(
     }
     if (spotId === null) return err({ code: "internal_error", message: "The spot was not created" });
     const publishedSpotId = spotId;
+    await fileFromStoredPlace(tx, publishedSpotId);
     if (published.length > 0) {
       await tx.insert(spotPhoto).values(published.map((photo, position) => ({ ...uploadedPhoto(photo), id: sql`uuidv7()::text`, spotId: publishedSpotId, position })));
     }

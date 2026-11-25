@@ -4,6 +4,7 @@ import { user } from "./auth.ts";
 import { clipUpload } from "./clips.ts";
 import { collection } from "./collections.ts";
 import { point } from "./geo.ts";
+import { osmPlace } from "./places.ts";
 import { city, SPOT_CONDITIONS, SPOT_KINDS, spot } from "./spots.ts";
 
 export const SUBMISSION_KINDS = ["new_spot", "edit_spot"] as const;
@@ -90,4 +91,18 @@ export const submissionPhoto = pgTable(
     check("submission_photo_rights", sql`${table.credit} is null or ${table.hasPermission}`),
     check("submission_photo_source", sql`(${table.photoId} is null) <> (${table.spotPhotoId} is null)`),
   ],
+);
+
+/** The place a pending public submission outside every city was found in; a row of its own, so the lookup never moves the submission's `updated_at`. */
+export const submissionPlace = pgTable(
+  "submission_place",
+  {
+    submissionId: text("submission_id")
+      .primaryKey()
+      .references(() => submission.id, { onDelete: "cascade" }),
+    osmPlaceId: text("osm_place_id")
+      .notNull()
+      .references(() => osmPlace.id),
+  },
+  (table) => [index("submission_place_osm_place_idx").on(table.osmPlaceId)],
 );

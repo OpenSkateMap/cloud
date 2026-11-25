@@ -47,6 +47,7 @@ They process data only to run OpenSkateMap:
 - **BuzzKit**, an open-source notification service, sends notifications. We run it ourselves, on the same Cloudflare and database accounts.
 - **RevenueCat** records tips.
 - **PostHog** stores usage analytics, if you leave them on, and website visits, in the United States.
+- **OpenStreetMap's Nominatim** receives the coordinates of a public spot submitted outside the cities we know, and nothing else, to find which city it's in.
 
 ## How long we keep it
 

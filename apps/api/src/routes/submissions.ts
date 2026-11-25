@@ -7,6 +7,7 @@ import { respondError } from "../lib/respond.ts";
 import { answers, authedRoute, jsonBody } from "../lib/routes.ts";
 import { NewSpotDraftSchema, SpotEditDraftSchema, type Submission, SubmissionSchema } from "../lib/submission-schemas.ts";
 import { limitWrites } from "../middleware/rate-limit.ts";
+import { findCityAfter } from "../services/city-places.ts";
 import { notifyAfter, reviewQueueNotice } from "../services/notifications.ts";
 import { approveSubmission } from "../services/review.ts";
 import { saveSpotEdit } from "../services/spot-edits.ts";
@@ -70,6 +71,7 @@ export const submissions = createRouter()
     if (saved.isErr()) return respondError(c, saved.error);
     const spot = (await approvedByAdmin(db, c.var.user, saved.value)) ?? saved.value;
     track(c, "spot_submitted", { private: spot.collectionId !== null, photos: spot.photos.length }, spot.id);
+    findCityAfter(c, spot);
     await notifyAfter(c, (db) => reviewQueueNotice(db, spot, c.var.user.id));
     return c.json(success(spot), 200);
   })
@@ -81,6 +83,7 @@ export const submissions = createRouter()
     const applied = await approvedByAdmin(db, c.var.user, saved.value);
     const edit = applied ?? saved.value;
     track(c, applied ? "spot_edited" : "edit_suggested", { photos: edit.photos.filter((photo) => !photo.existing).length }, edit.id);
+    findCityAfter(c, edit);
     await notifyAfter(c, (db) => reviewQueueNotice(db, edit, c.var.user.id));
     return c.json(success(edit), 200);
   })

@@ -4,6 +4,7 @@ import { except } from "hono/combine";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import { errorSummary } from "./lib/log.ts";
+import { livePlaceLookup, type PlaceLookup } from "./lib/nominatim.ts";
 import { createRouter } from "./lib/openapi-app.ts";
 import { respondError } from "./lib/respond.ts";
 import { rateLimitByIp } from "./middleware/rate-limit.ts";
@@ -38,7 +39,7 @@ const apiHeaders = secureHeaders({
   strictTransportSecurity: false,
 });
 
-export function createApp() {
+export function createApp({ placeLookup = livePlaceLookup }: { placeLookup?: PlaceLookup | null } = {}) {
   const app = createRouter();
 
   const limitBody = bodyLimit({
@@ -48,6 +49,10 @@ export function createApp() {
   app.use("/v1/*", apiHeaders);
   app.use("/v1/*", rateLimitByIp("ADDRESS_LIMITER"));
   app.use("/v1/*", except(["/v1/photos/*", "/v1/clips/*"], limitBody));
+  app.use("/v1/*", async (c, next) => {
+    c.set("placeLookup", placeLookup);
+    await next();
+  });
 
   app.route("/", health);
   app.route("/", auth);

@@ -30,16 +30,22 @@ const { positionals, values } = parseArgs({
   options: { as: { type: "string" }, "dry-run": { type: "boolean", default: false } },
 });
 
+const Key = z.string().regex(/^[\w-]{1,64}$/);
 // Rows of one spot keep their order; the first becomes the cover when the spot has no photos yet.
-const Row = z.object({
-  key: z.string().regex(/^[\w-]{1,64}$/),
+const AddRow = z.object({
+  key: Key,
   spotId: z.uuid(),
   file: z.string().min(1),
   credit: PhotoCreditSchema.default({ takenBy: "submitter" }),
   clip: z.string().min(1).optional(),
   clipStart: z.number().min(0).default(0),
 });
-type Row = z.infer<typeof Row>;
+// Takes off the spot the plain photo an earlier run added under this key.
+const RemoveRow = z.object({ key: Key, spotId: z.uuid(), remove: z.literal(true) });
+const Row = z.union([RemoveRow, AddRow]);
+type AddRow = z.infer<typeof AddRow>;
+type RemoveRow = z.infer<typeof RemoveRow>;
+const isRemoval = (row: z.infer<typeof Row>): row is RemoveRow => "remove" in row;
 
 const url = process.env.DATABASE_URL;
 const [file] = positionals;
@@ -135,13 +141,13 @@ const store: UploadStore = {
 
 /** A row's poster upload and its clip: `added` goes first, `replaces` takes the place of the row's earlier live photo (plain, or a clip encoded the earlier way), `live` is on the spot already. */
 type Plan = {
-  row: Row;
+  row: AddRow;
   photoId: string;
   clip?: { id: string; source: ClipSource; cut: ClipCut };
   place: { kind: "added" } | { kind: "replaces"; spotPhotoId: string } | { kind: "live" };
 };
 
-async function planRow(row: Row, liveUploads: Map<string, string>): Promise<Plan | string> {
+async function planRow(row: AddRow, liveUploads: Map<string, string>): Promise<Plan | string> {
   const plainId = uuidFrom(`openskatemap-photo:${row.key}`);
   const plainOnSpot = liveUploads.get(plainId);
   if (row.clip === undefined) return { row, photoId: plainId, place: plainOnSpot === undefined ? { kind: "added" } : { kind: "live" } };
@@ -163,6 +169,10 @@ async function planRow(row: Row, liveUploads: Map<string, string>): Promise<Plan
   return { row, photoId, clip: { id: clipId, source, cut }, place };
 }
 
+type Removal = { row: RemoveRow; spotPhotoId: string | undefined };
+
+const describeRemoval = ({ row, spotPhotoId }: Removal) => (spotPhotoId === undefined ? `= ${row.key} (not on the spot)` : `- ${row.key}`);
+
 const describePlan = ({ row, clip, place }: Plan) => {
   const clipped = clip === undefined ? "" : ` with a ${clip.cut.seconds.toFixed(1)} s clip from ${row.clipStart} s`;
   if (place.kind === "live") return `= ${row.key}${clipped}`;
@@ -180,7 +190,7 @@ try {
   if (account?.role !== "admin") throw new Error(`${values.as} is not an admin`);
   const actor: CurrentUser = { ...account, role: "admin" };
 
-  const counts = { spots: 0, photos: 0, clips: 0, alreadyAdded: 0, failed: 0 };
+  const counts = { spots: 0, photos: 0, clips: 0, removed: 0, alreadyAdded: 0, failed: 0 };
   for (const [spotId, spotRows] of bySpot) {
     const [spot] = await db.select({ title: schema.spot.title, status: schema.spot.status }).from(schema.spot).where(eq(schema.spot.id, spotId));
     if (spot?.status !== "published") {
@@ -202,8 +212,10 @@ try {
         : await db.select({ id: schema.photoUpload.id, r2Key: schema.photoUpload.r2Key }).from(schema.photoUpload).where(inArray(schema.photoUpload.r2Key, [...liveByKey.keys()]));
     const liveUploads = new Map(uploads.flatMap((upload) => { const spotPhotoId = liveByKey.get(upload.r2Key); return spotPhotoId === undefined ? [] : [[upload.id, spotPhotoId] as const]; }));
 
+    const removals: Removal[] = spotRows.filter(isRemoval).map((row) => ({ row, spotPhotoId: liveUploads.get(uuidFrom(`openskatemap-photo:${row.key}`)) }));
+    const removed = new Set(removals.flatMap(({ spotPhotoId }) => (spotPhotoId === undefined ? [] : [spotPhotoId])));
     const planned = [];
-    for (const row of spotRows) planned.push(await planRow(row, liveUploads));
+    for (const row of spotRows) if (!isRemoval(row)) planned.push(await planRow(row, liveUploads));
     const failures = planned.filter((plan) => typeof plan === "string");
     if (failures.length > 0) {
       counts.failed += 1;
@@ -212,14 +224,17 @@ try {
     }
     const plans = planned.filter((plan) => typeof plan !== "string");
     const changes = plans.filter((plan) => plan.place.kind !== "live");
+    const described = [...plans.map(describePlan), ...removals.map(describeRemoval)].join(", ");
     if (values["dry-run"]) {
-      console.log(`${changes.length === 0 ? "nothing for" : "would update"} "${spot.title}" (has ${base.length}): ${plans.map(describePlan).join(", ")}`);
-      if (changes.length > 0) counts.spots += 1;
+      const changing = changes.length > 0 || removed.size > 0;
+      console.log(`${changing ? "would update" : "nothing for"} "${spot.title}" (has ${base.length}): ${described}`);
+      if (changing) counts.spots += 1;
       counts.photos += changes.length;
       counts.clips += changes.filter((plan) => plan.clip !== undefined).length;
+      counts.removed += removed.size;
       continue;
     }
-    if (changes.length === 0) {
+    if (changes.length === 0 && removed.size === 0) {
       counts.alreadyAdded += plans.length;
       continue;
     }
@@ -236,8 +251,12 @@ try {
       photos.push({ photoId, thumbhash: await thumbhashOf(row.file), credit: row.credit, ...(clip === undefined ? {} : { clipId: clip.id }) });
     }
     const replacing = new Map(changes.flatMap(({ photoId, place }) => (place.kind === "replaces" ? [[place.spotPhotoId, photoId] as const] : [])));
-    const order = [...changes.filter((plan) => plan.place.kind === "added").map((plan) => plan.photoId), ...base.map((id) => replacing.get(id) ?? id)];
-    const editId = uuidFrom(`openskatemap-photo-edit:${spotId}:${plans.map(({ row, clip }) => (clip === undefined ? row.key : `${row.key}:clip:${clip.id}`)).join(",")}`);
+    const order = [
+      ...changes.filter((plan) => plan.place.kind === "added").map((plan) => plan.photoId),
+      ...base.filter((id) => !removed.has(id)).map((id) => replacing.get(id) ?? id),
+    ];
+    const editKeys = [...plans.map(({ row, clip }) => (clip === undefined ? row.key : `${row.key}:clip:${clip.id}`)), ...removals.map(({ row }) => `${row.key}:remove`)];
+    const editId = uuidFrom(`openskatemap-photo-edit:${spotId}:${editKeys.join(",")}`);
     const edit = await saveSpotEdit(db, actor.id, editId, { spotId, changes: {}, photos, photoEdit: { order, base }, note: "" });
     if (edit.isErr()) {
       counts.failed += 1;
@@ -257,7 +276,8 @@ try {
     counts.spots += 1;
     counts.photos += changes.length;
     counts.clips += changes.filter((plan) => plan.clip !== undefined).length;
-    console.log(`ok "${spot.title}": ${changes.map(describePlan).join(", ")}`);
+    counts.removed += removed.size;
+    console.log(`ok "${spot.title}": ${described}`);
   }
   console.log(JSON.stringify(counts));
   process.exitCode = counts.failed > 0 ? 1 : 0;

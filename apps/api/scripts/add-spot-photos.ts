@@ -20,6 +20,9 @@ const BUCKET = "openskatemap-photos";
 const WRANGLER = new URL("../../web/node_modules/.bin/wrangler", import.meta.url).pathname;
 const CLIP_SECONDS = { min: 3, max: schema.CLIP_MAX_DURATION_MS / 1000 };
 const CLIP_MAX_FPS = 30;
+// A clip's id names how it was encoded, so a re-run after the encode changes replaces a clip encoded an earlier way in place.
+const CLIP_ENCODING = ":aac";
+const EARLIER_CLIP_ENCODINGS = [""];
 const run = promisify(execFile);
 
 const { positionals, values } = parseArgs({
@@ -75,7 +78,15 @@ async function clipCut({ path, start }: ClipSource) {
   const fps = denominator > 0 ? numerator / denominator : 0;
   const kept = fps > 0 && fps <= CLIP_MAX_FPS;
   const seconds = Math.min(CLIP_SECONDS.max, format.duration - start);
-  return { rate: kept ? streams[0].avg_frame_rate : String(CLIP_MAX_FPS), seconds, frames: Math.floor(seconds * (kept ? fps : CLIP_MAX_FPS)) };
+  const rate = kept ? fps : CLIP_MAX_FPS;
+  const frames = Math.floor(seconds * rate);
+  return { rate: kept ? streams[0].avg_frame_rate : String(CLIP_MAX_FPS), seconds, frames, length: frames / rate };
+}
+
+/** The first sound track's channels, at most two; 0 without sound. */
+async function soundChannels(path: string) {
+  const { stdout } = await run("ffprobe", ["-v", "error", "-select_streams", "a:0", "-show_entries", "stream=channels", "-of", "csv=p=0", path]);
+  return Math.min(Number(stdout.trim()) || 0, 2);
 }
 type ClipCut = Awaited<ReturnType<typeof clipCut>>;
 
@@ -85,10 +96,13 @@ async function encodeClip({ path, start }: ClipSource, cut: ClipCut) {
   const output = join(scratch, `clip-${crypto.randomUUID()}.mp4`);
   // The shorter side at most 720 px, never scaled up, and both sides even.
   const scale = "scale=w='if(gt(iw,ih),-2,trunc(min(720,iw)/2)*2)':h='if(gt(iw,ih),trunc(min(720,ih)/2)*2,-2)'";
+  const channels = await soundChannels(path);
+  // The sound is trimmed to the picture's length, so it never runs the clip past 16 s.
+  const sound = channels === 0 ? ["-an"] : ["-map", "0:a:0", "-c:a", "aac", "-b:a", `${64 * channels}k`, "-ac", String(channels), "-af", `atrim=end=${cut.length}`];
   await run("ffmpeg", [
     ...["-v", "error", "-y", "-ss", String(start), "-i", path, "-map", "0:v:0", "-frames:v", String(cut.frames)],
     ...["-vf", `fps=${cut.rate},${scale}`, "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-tag:v", "avc1"],
-    ...["-b:v", "1800k", "-maxrate", "2000k", "-bufsize", "4000k", "-an", "-map_metadata", "-1", "-movflags", "+faststart", output],
+    ...["-b:v", "1800k", "-maxrate", "2000k", "-bufsize", "4000k", ...sound, "-map_metadata", "-1", "-movflags", "+faststart", output],
   ]);
   const bytes = new Uint8Array(await readFile(output));
   await rm(output);
@@ -119,7 +133,7 @@ const store: UploadStore = {
   },
 };
 
-/** A row's poster upload and its clip: `added` goes first, `replaces` takes the live plain photo's place, `live` is on the spot already. */
+/** A row's poster upload and its clip: `added` goes first, `replaces` takes the place of the row's earlier live photo (plain, or a clip encoded the earlier way), `live` is on the spot already. */
 type Plan = {
   row: Row;
   photoId: string;
@@ -132,15 +146,20 @@ async function planRow(row: Row, liveUploads: Map<string, string>): Promise<Plan
   const plainOnSpot = liveUploads.get(plainId);
   if (row.clip === undefined) return { row, photoId: plainId, place: plainOnSpot === undefined ? { kind: "added" } : { kind: "live" } };
   const source = { path: row.clip, start: row.clipStart };
-  const clipId = uuidFrom(`openskatemap-clip:${row.key}:${createHash("sha1").update(await readFile(row.clip)).digest("hex")}:${row.clipStart}`);
-  const photoId = uuidFrom(`openskatemap-photo:${row.key}:clip:${clipId}`);
+  const sha = createHash("sha1").update(await readFile(row.clip)).digest("hex");
+  const clipIdFor = (encoding: string) => uuidFrom(`openskatemap-clip:${row.key}:${sha}:${row.clipStart}${encoding}`);
+  const photoIdFor = (clipId: string) => uuidFrom(`openskatemap-photo:${row.key}:clip:${clipId}`);
+  const clipId = clipIdFor(CLIP_ENCODING);
+  const photoId = photoIdFor(clipId);
   const cut = await clipCut(source);
   if (cut.seconds < CLIP_SECONDS.min) return `${row.key}: its clip would be ${Math.max(0, cut.seconds).toFixed(1)} s, under ${CLIP_SECONDS.min} s`;
+  const earlier = [plainId, ...EARLIER_CLIP_ENCODINGS.map((encoding) => photoIdFor(clipIdFor(encoding)))];
+  const replaced = earlier.map((id) => liveUploads.get(id)).find((id) => id !== undefined);
   const place: Plan["place"] = liveUploads.has(photoId)
     ? { kind: "live" }
-    : plainOnSpot === undefined
+    : replaced === undefined
       ? { kind: "added" }
-      : { kind: "replaces", spotPhotoId: plainOnSpot };
+      : { kind: "replaces", spotPhotoId: replaced };
   return { row, photoId, clip: { id: clipId, source, cut }, place };
 }
 

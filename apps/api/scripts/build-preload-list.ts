@@ -15,6 +15,15 @@ const OVERRIDES: Record<string, number> = {
   Q406: 223474, // Istanbul: no relation carries its item
   Q84: 175342, // London: Greater London, not the ceremonial county
 };
+// Regions and districts in Wikidata's million-plus list: Peel Region, York Region, uMgungundlovu, Perm District, City of Belgrade.
+const NOT_CITIES = new Set(["Q50811", "Q18458", "Q311803", "Q78223868", "Q2074197"]);
+// Items that are the municipality, not the city: their labels read "городской округ …", the city's item reads "Екатеринбург".
+const CITY_ITEMS: Record<string, { wikidata: string; name: string }> = {
+  Q4307474: { wikidata: "Q887", name: "Yekaterinburg" },
+  Q4307501: { wikidata: "Q3646", name: "Krasnodar" },
+  Q1477270: { wikidata: "Q199440", name: "Mexicali" },
+  Q506250: { wikidata: "Q1754", name: "Stockholm" },
+};
 const MAX_AREA_KM2 = 10_000;
 // Wikidata labels some items as the administration ("Monterrey Municipality"); OpenStreetMap's English name rarely does.
 const ADMINISTRATIVE_NAME = /\b(Municipality|Municipal|County|Regency|Prefecture|Province|Urban Okrug|City of)\b/;
@@ -226,8 +235,15 @@ for (const { inner, outer } of nested.toSorted((a, b) => (measured.get(b.outer) 
   skipped.push({ ...loser, reason: `${Math.round(NESTED_SHARE * 100)} % or more of it is shared with ${winner.name}` });
 }
 
+for (const entry of chosen.values()) {
+  if (NOT_CITIES.has(entry.wikidata)) {
+    chosen.delete(entry.relation);
+    skipped.push({ ...entry, reason: "a region or district, not a city" });
+  }
+}
+
 const list = PreloadListSchema.parse(
-  [...chosen.values()].map(({ linkedCity: _, ...entry }) => entry).toSorted((a, b) => b.population - a.population || a.wikidata.localeCompare(b.wikidata)),
+  [...chosen.values()].map(({ linkedCity: _, ...entry }) => ({ ...entry, ...CITY_ITEMS[entry.wikidata] })).toSorted((a, b) => b.population - a.population || a.wikidata.localeCompare(b.wikidata)),
 );
 const lines = (rows: unknown[]) => `[\n${rows.map((row) => `  ${JSON.stringify(row)}`).join(",\n")}\n]\n`;
 await writeFile(data("preload-cities.json"), lines(list));

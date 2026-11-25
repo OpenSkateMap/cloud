@@ -151,6 +151,14 @@ through Hyperdrive, R2 for photos and clips. The iOS app's client is generated f
   offline; every other payload names a city by `cityId` (profiles' `editorOf` also by its English name). Search
   matches every name. Server-written text (pushes, the share card) says `name`: the server doesn't know the reader's
   language.
+- **City boundaries are open data** (ODbL, Ertem 2026-11-25): `GET /v1/cities/boundaries` (public,
+  `CityBoundariesSchema`) answers every row of `city`, hidden or shown, as a GeoJSON FeatureCollection
+  (`application/geo+json`, not the envelope; errors still are); `source` is `openstreetmap` when the city has an
+  `osm_place_id`. It reads `city` alone, never `osm_place`, `submission_place`, `place_miss` or submissions: a stored
+  place can tell where a pending spot was sent. About 5 MB, so each data center keeps it as text for a day and sends it
+  as stored (`sharedText`: parsing and checking it would cost ~50 ms of CPU a request), with `Cache-Control: public,
+  max-age=86400`, so a change of shape reaches everyone within a day. On 371 generated cities (284,000 vertices, 4.5 MB
+  in PostGIS, 6.4 MB out) the query ran in ~50 ms. The site's footer and `NOTICE.md` link it.
 - **Locations** use the `point` column type (`packages/db/src/schema/geo.ts`): it writes EWKT with SRID 4326 and
   reads hex EWKB. Drizzle's built-in `geometry` drops the SRID, which a 4326 column rejects. Distances in meters use
   `::geography` on both sides, which matches the expression index `spot_location_geography_gist`.

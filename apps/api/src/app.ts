@@ -9,6 +9,7 @@ import { createRouter } from "./lib/openapi-app.ts";
 import { respondError } from "./lib/respond.ts";
 import { rateLimitByIp } from "./middleware/rate-limit.ts";
 import { auth } from "./routes/auth.ts";
+import { cities } from "./routes/cities.ts";
 import { clips } from "./routes/clips.ts";
 import { collections } from "./routes/collections.ts";
 import { health } from "./routes/health.ts";
@@ -59,6 +60,7 @@ export function createApp({ placeLookup = livePlaceLookup }: { placeLookup?: Pla
   app.route("/", me);
   app.route("/", spots);
   app.route("/", spotCards);
+  app.route("/", cities);
   app.route("/", submissions);
   app.route("/", videos);
   app.route("/", votes);

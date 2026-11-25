@@ -8,4 +8,6 @@ export const PUBLIC_OPERATIONS = new Set([
   "receiveAppleNotification",
   // A shared spot link's preview: name, kind, city and cover only (`SpotCardSchema` is strict).
   "getSpotCard",
+  // Every city's name and boundary, open data under the ODbL; read from `city` alone, never stored places or submissions.
+  "getCityBoundaries",
 ]);

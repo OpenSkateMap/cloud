@@ -41,4 +41,5 @@ The `credits.json` in each folder holds the same records.
 
 City boundaries the API finds itself come from [OpenStreetMap](https://www.openstreetmap.org/copyright), © OpenStreetMap
 contributors, under the [ODbL](https://opendatacommons.org/licenses/odbl/); the website's footer and the app's
-Acknowledgements say so. City names come from OpenStreetMap and from Wikidata ([CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)).
+Acknowledgements say so. Every city's boundary is available under the ODbL as GeoJSON at
+<https://api.openskatemap.app/v1/cities/boundaries>. City names come from OpenStreetMap and from Wikidata ([CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)).

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { z } from "@hono/zod-openapi";
-import { sharedAnswer } from "../src/lib/shared-answer.ts";
+import { sharedAnswer, sharedText } from "../src/lib/shared-answer.ts";
 
 const memoryCache = () => {
   const entries = new Map<string, Response>();
@@ -41,5 +41,24 @@ describe("shared answers", () => {
     await cache.put(key, Response.json({ items: "nope" }));
     const fresh = await sharedAnswer({ key, seconds: 60, schema, cache, waitUntil: () => {} }, async () => ({ items: [3] }));
     expect(fresh).toEqual({ items: [3] });
+  });
+
+  test("a shared text is stored once and served as stored, without loading or parsing it again", async () => {
+    const cache = memoryCache();
+    const pending: Promise<unknown>[] = [];
+    let loads = 0;
+    const text = () =>
+      sharedText({ key, seconds: 86_400, cache, waitUntil: (promise) => void pending.push(promise) }, async () => {
+        loads += 1;
+        return '{"type":"FeatureCollection"}';
+      });
+
+    expect(await text()).toBe('{"type":"FeatureCollection"}');
+    await Promise.all(pending);
+    expect(cache.entries.get(key)?.headers.get("cache-control")).toBe("public, max-age=86400");
+    const stored = await text();
+    expect(stored).toBeInstanceOf(ReadableStream);
+    expect(await new Response(stored).text()).toBe('{"type":"FeatureCollection"}');
+    expect(loads).toBe(1);
   });
 });

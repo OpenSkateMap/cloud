@@ -189,11 +189,52 @@ export const CitySchema = z
 
 export const CityNameSchema = CitySchema.pick({ id: true, name: true, names: true }).openapi("CityName");
 
+export const CITY_BOUNDARIES_LICENSE = {
+  license: "ODbL-1.0",
+  licenseUrl: "https://opendatacommons.org/licenses/odbl/1-0/",
+  attribution: "© OpenStreetMap contributors",
+  attributionUrl: "https://www.openstreetmap.org/copyright",
+} as const;
+
+const PositionSchema = z.tuple([longitude, latitude]).openapi({ description: "[longitude, latitude], WGS 84" });
+
+export const CityBoundarySchema = z
+  .object({
+    type: z.literal("Feature"),
+    geometry: z.object({
+      type: z.literal("MultiPolygon"),
+      coordinates: z.array(z.array(z.array(PositionSchema))).openapi({
+        description: "Polygons, each its outer ring (counterclockwise) then its holes (clockwise), rounded to 6 decimals (RFC 7946)",
+      }),
+    }),
+    properties: CitySchema.pick({ id: true, slug: true, name: true, names: true, countryCode: true }).extend({
+      wikidataId: z.string().nullable().openapi({ description: "The Wikidata item its names come from" }),
+      source: z.enum(["openstreetmap", "hand-drawn"]).openapi({
+        description: "openstreetmap: made from an OpenStreetMap place (its boundary minus the cities around it); hand-drawn: drawn by us",
+      }),
+    }),
+  })
+  .openapi("CityBoundary");
+
+export const CityBoundariesSchema = z
+  .object({
+    type: z.literal("FeatureCollection"),
+    license: z.literal(CITY_BOUNDARIES_LICENSE.license),
+    licenseUrl: z.literal(CITY_BOUNDARIES_LICENSE.licenseUrl),
+    attribution: z.literal(CITY_BOUNDARIES_LICENSE.attribution),
+    attributionUrl: z.literal(CITY_BOUNDARIES_LICENSE.attributionUrl),
+    generatedAt: z.iso.datetime(),
+    features: z.array(CityBoundarySchema).openapi({ description: "Every city, shown in the apps or not yet, by slug" }),
+  })
+  .openapi("CityBoundaries");
+
 export type SpotIndexRow = z.infer<typeof SpotIndexRowSchema>;
 export type SyncPage = z.infer<typeof SyncPageSchema>;
 export type SpotDetails = z.infer<typeof SpotDetailsSchema>;
 export type NearbySpot = z.infer<typeof NearbySpotSchema>;
 export type City = z.infer<typeof CitySchema>;
+export type CityBoundaries = z.infer<typeof CityBoundariesSchema>;
+export type CityBoundary = z.infer<typeof CityBoundarySchema>;
 export type SpotVideo = z.infer<typeof SpotVideoSchema>;
 export type SpotVotes = z.infer<typeof SpotVotesSchema>;
 export type SpotScores = z.infer<typeof SpotScoresSchema>;

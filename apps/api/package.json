@@ -13,7 +13,7 @@
     "test": "bun test ./test",
     "openapi": "bun run scripts/openapi.ts",
     "openapi:check": "bun run scripts/openapi.ts --check",
-    "e2e": "bun test ./e2e",
+    "e2e": "bun run scripts/e2e.ts",
     "create-city": "bun run scripts/create-city.ts",
     "file-cityless-spots": "bun run scripts/file-cityless-spots.ts",
     "preload-cities": "bun run scripts/preload-cities.ts",

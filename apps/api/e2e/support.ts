@@ -2,8 +2,11 @@ import { z } from "@hono/zod-openapi";
 import { type Database, schema } from "@openskatemap/db";
 import { createApp } from "../src/app.ts";
 import { bindings, executionContext } from "../test/support.ts";
+import { renameDatabase, workerDatabase } from "./worker-database.ts";
 
-export const e2eUrl = process.env.E2E_DATABASE_URL;
+const baseUrl = process.env.E2E_DATABASE_URL;
+const worker = process.env.BUN_TEST_WORKER_ID;
+export const e2eUrl = baseUrl && worker ? renameDatabase(baseUrl, (name) => workerDatabase(name, worker)) : baseUrl;
 
 export const photosBucket = (() => {
   const objects = new Map<string, { bytes: Uint8Array; contentType: string | undefined }>();

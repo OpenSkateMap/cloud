@@ -14,7 +14,12 @@ type Rider = Awaited<ReturnType<typeof createRider>>;
 describe.skipIf(!e2eUrl)("taking a spot down and restoring it (database)", () => {
   const database = e2eUrl ? openDatabase(e2eUrl) : undefined;
   const tag = crypto.randomUUID().slice(0, 8);
-  const ids = { open: `e2e-removal-${tag}-open`, hidden: `e2e-removal-${tag}-private`, undone: `e2e-removal-${tag}-undone` };
+  const ids = {
+    synced: `e2e-removal-${tag}-synced`,
+    open: `e2e-removal-${tag}-open`,
+    hidden: `e2e-removal-${tag}-private`,
+    undone: `e2e-removal-${tag}-undone`,
+  };
   const submissionIds = { approved: crypto.randomUUID(), undone: crypto.randomUUID() };
   let db: Database;
   let admin: Rider, editor: Rider, plain: Rider;
@@ -39,6 +44,8 @@ describe.skipIf(!e2eUrl)("taking a spot down and restoring it (database)", () =>
     await db.update(user).set({ role: "admin" }).where(eq(user.id, admin.userId));
     await db.update(user).set({ role: "editor" }).where(eq(user.id, editor.userId));
     const location = { latitude: 38.72, longitude: -9.15 };
+    // An app that has synced holds a cursor above 0; from 0 the sync sends no tombstones, and an empty table's first version is 1.
+    await db.insert(spot).values({ id: ids.synced, title: "Already Synced", kind: "street", location });
     await db.insert(spot).values([
       { id: ids.open, title: "Open", kind: "plaza", location },
       { id: ids.hidden, title: "Backyard", kind: "diy", visibility: "private", createdBy: plain.userId, location },

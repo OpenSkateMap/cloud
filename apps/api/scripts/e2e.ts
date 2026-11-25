@@ -28,10 +28,9 @@ process.on("SIGINT", () => {});
 let exitCode = 1;
 try {
   await asOwner(`create database "${run}"`);
-  const { DATABASE_URL_APP: _appRoleSettings, ...env } = process.env;
   const migrate = Bun.spawn(["bun", "run", "src/migrate.ts"], {
     cwd: new URL("../../../packages/db", import.meta.url).pathname,
-    env: { ...env, DATABASE_URL: renameDatabase(ownerUrl, () => run) },
+    env: { ...process.env, DATABASE_URL: renameDatabase(ownerUrl, () => run) },
     stdout: "ignore",
     stderr: "inherit",
   });

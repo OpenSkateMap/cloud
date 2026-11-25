@@ -1,5 +1,5 @@
 import { z } from "@hono/zod-openapi";
-import { SPOT_CONDITIONS, SPOT_KINDS, SPOT_REMOVAL_REASONS, SPOT_VISIBILITIES, VIDEO_PROVIDERS } from "@openskatemap/db/schema";
+import { CITY_LANGUAGES, SPOT_CONDITIONS, SPOT_KINDS, SPOT_REMOVAL_REASONS, SPOT_VISIBILITIES, VIDEO_PROVIDERS } from "@openskatemap/db/schema";
 
 export const SpotKindSchema = z.enum(SPOT_KINDS).openapi("SpotKind");
 export const SpotConditionSchema = z.enum(SPOT_CONDITIONS).openapi("SpotCondition");
@@ -65,6 +65,15 @@ export const SyncPageSchema = z
   })
   .openapi("SyncPage");
 
+export const SpotPhotoClipSchema = z
+  .object({
+    key: z.string().openapi({ description: "The MP4 at https://images.openskatemap.app/<key>, served as it is (no image transformations)" }),
+    width: z.int(),
+    height: z.int(),
+    durationMs: z.int(),
+  })
+  .openapi("SpotPhotoClip", { description: "A short clip that plays in place of the photo, muted and looped; the photo is its poster" });
+
 export const SpotPhotoSchema = z
   .object({
     id: z.string(),
@@ -74,6 +83,8 @@ export const SpotPhotoSchema = z
     thumbhash: z.string(),
     credit: z.string().nullable().openapi({ description: "Who took it: the photographer named by the submitter, else the uploader's name; null if unknown" }),
     position: z.int(),
+    createdAt: z.iso.datetime().openapi({ description: "When it was added to the spot" }),
+    clip: SpotPhotoClipSchema.optional(),
   })
   .openapi("SpotPhoto");
 
@@ -166,17 +177,64 @@ export const CitySchema = z
   .object({
     id: z.string(),
     slug: z.string(),
-    name: z.string(),
+    name: z.string().openapi({ description: "In English; what to show in a language `names` doesn't have" }),
+    names: z.record(z.string(), z.string()).openapi({
+      description: `The name in each of the apps' languages (${CITY_LANGUAGES.join(", ")}), so an app picks its own offline; empty for a city whose names aren't filled yet`,
+      example: { de: "Sankt Petersburg", ru: "Санкт-Петербург", "zh-Hans": "圣彼得堡" },
+    }),
     countryCode: z.string(),
     bounds: z.object({ minLatitude: latitude, minLongitude: longitude, maxLatitude: latitude, maxLongitude: longitude }),
   })
   .openapi("City");
+
+export const CityNameSchema = CitySchema.pick({ id: true, name: true, names: true }).openapi("CityName");
+
+export const CITY_BOUNDARIES_LICENSE = {
+  license: "ODbL-1.0",
+  licenseUrl: "https://opendatacommons.org/licenses/odbl/1-0/",
+  attribution: "© OpenStreetMap contributors",
+  attributionUrl: "https://www.openstreetmap.org/copyright",
+} as const;
+
+const PositionSchema = z.tuple([longitude, latitude]).openapi({ description: "[longitude, latitude], WGS 84" });
+
+export const CityBoundarySchema = z
+  .object({
+    type: z.literal("Feature"),
+    geometry: z.object({
+      type: z.literal("MultiPolygon"),
+      coordinates: z.array(z.array(z.array(PositionSchema))).openapi({
+        description: "Polygons, each its outer ring (counterclockwise) then its holes (clockwise), rounded to 6 decimals (RFC 7946)",
+      }),
+    }),
+    properties: CitySchema.pick({ id: true, slug: true, name: true, names: true, countryCode: true }).extend({
+      wikidataId: z.string().nullable().openapi({ description: "The Wikidata item its names come from" }),
+      source: z.enum(["openstreetmap", "hand-drawn"]).openapi({
+        description: "openstreetmap: made from an OpenStreetMap place (its boundary minus the cities around it); hand-drawn: drawn by us",
+      }),
+    }),
+  })
+  .openapi("CityBoundary");
+
+export const CityBoundariesSchema = z
+  .object({
+    type: z.literal("FeatureCollection"),
+    license: z.literal(CITY_BOUNDARIES_LICENSE.license),
+    licenseUrl: z.literal(CITY_BOUNDARIES_LICENSE.licenseUrl),
+    attribution: z.literal(CITY_BOUNDARIES_LICENSE.attribution),
+    attributionUrl: z.literal(CITY_BOUNDARIES_LICENSE.attributionUrl),
+    generatedAt: z.iso.datetime(),
+    features: z.array(CityBoundarySchema).openapi({ description: "Every city, shown in the apps or not yet, by slug" }),
+  })
+  .openapi("CityBoundaries");
 
 export type SpotIndexRow = z.infer<typeof SpotIndexRowSchema>;
 export type SyncPage = z.infer<typeof SyncPageSchema>;
 export type SpotDetails = z.infer<typeof SpotDetailsSchema>;
 export type NearbySpot = z.infer<typeof NearbySpotSchema>;
 export type City = z.infer<typeof CitySchema>;
+export type CityBoundaries = z.infer<typeof CityBoundariesSchema>;
+export type CityBoundary = z.infer<typeof CityBoundarySchema>;
 export type SpotVideo = z.infer<typeof SpotVideoSchema>;
 export type SpotVotes = z.infer<typeof SpotVotesSchema>;
 export type SpotScores = z.infer<typeof SpotScoresSchema>;

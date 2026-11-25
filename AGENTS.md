@@ -1,7 +1,7 @@
 # OpenSkateMap cloud
 
 The backend for OpenSkateMap: one Cloudflare Worker (Hono API) in front of PlanetScale Postgres with PostGIS
-through Hyperdrive, R2 for photos. The iOS app's client is generated from `apps/api/openapi.json`.
+through Hyperdrive, R2 for photos and clips. The iOS app's client is generated from `apps/api/openapi.json`.
 
 ## Layout
 
@@ -49,8 +49,13 @@ through Hyperdrive, R2 for photos. The iOS app's client is generated from `apps/
 | Website locally | `bun run --filter @openskatemap/web dev` (builds `.pages`, then `wrangler dev` serves the Worker and every page) |
 | Landing page locally | `bun run --filter @openskatemap/landing dev` (Astro with hot reload on port 4321, reachable from a phone on the same network) |
 | Local sample data | `bun run --filter @openskatemap/api seed:local` (localhost only): London and Barcelona, eight public spots, an admin rider; prints a session token |
-| Add or resize a city | `DATABASE_URL=... bun run --filter @openskatemap/api create-city --slug london --name London --country GB --bbox=-0.51,51.28,0.33,51.69` |
+| Add or resize a city | `DATABASE_URL=... bun run --filter @openskatemap/api create-city --slug london --name London --country GB --bbox=-0.51,51.28,0.33,51.69 --wikidata Q84` (`--wikidata` fills its names; without it a resize keeps them) |
+| File spots outside every city | `DATABASE_URL=... bun run --filter @openskatemap/api file-cityless-spots`: `fileSpot()` for every published public spot without a city (retries, backfills), one Nominatim request a second at most |
+| Make big cities ahead of their spots | `DATABASE_URL=... bun run --filter @openskatemap/api preload-cities [--dry-run]` reads `apps/api/data/preload-cities.json`: each relation's boundary from Nominatim's `lookup` and its names (its Wikidata labels first), saved like an automatic city (hidden until it has a spot); one already made from that relation or Wikidata item, or a city lying inside its boundary, stays as it is (`--dry-run` prints the first two). Smallest first, so a wider place takes only what's left. Run it after every hand-drawn city has its `wikidata_id` |
+| Rebuild the preload list | `DATABASE_URL=<local PostGIS> bun run --filter @openskatemap/api build-preload-list`: Wikidata's cities of a million or more, without US counties (`data/preload-cities.rq`), each as the administrative relation carrying the item's own `wikidata` tag (Overpass, 50 a query; Wikidata's P402 is wrong for London and missing for Istanbul), boundaries from Nominatim's `lookup` (50 a request, a second apart) measured in PostGIS: over 10,000 km² is skipped (on-demand lookups cover those), one row per relation, a place 90 % inside another gives way to it unless only it is a city proper (`linked_place=city`), overrides in the script, exempt from the size limit (Tokyo's 23 wards, Istanbul, Greater London), named by Wikidata's English label unless only it sounds like an administration ("… Municipality"). Wikidata's and Overpass's answers are kept in the temporary folder for a rerun after an outage. Writes `data/preload-cities.json` and `data/preload-cities-skipped.json` (with reasons); review the diff |
 | Make someone a city editor | `DATABASE_URL=... bun run --filter @openskatemap/api grant-editor <user-id> <city-slug> [--revoke]` |
+| Import a list of spots | `DATABASE_URL=... bun run --filter @openskatemap/api import-spots <spots.json> --as <admin-user-id> [--dry-run]`: each row is submitted and approved as that admin through the review services (no notices); a row within 60 m of a published spot is skipped; re-runs are safe |
+| Add photos to spots | `DATABASE_URL=... CLOUDFLARE_API_TOKEN=... bun run --filter @openskatemap/api add-spot-photos <photos.json> --as <admin-user-id> [--dry-run]`: each row (`key`, `spotId`, a JPEG `file`, optional `credit`, optional `clip`: a video, cut from `clipStart` seconds) is uploaded to R2 with Wrangler and added to its spot as that admin's edit, approved at once (no notices); a spot's rows keep their order, so its first row becomes the cover of a spot without photos. A clip is encoded with ffmpeg (H.264 High, shorter side at most 720 px, at most 30 fps, about 1.8 Mbps, its first sound track as AAC at 64 kbps a channel, at most stereo, trimmed to the picture, no metadata, faststart, at most 16 s; a row under 3 s fails) and goes up with its photo; a photo the key already has live (its plain photo, or a clip encoded an earlier way, `EARLIER_CLIP_ENCODINGS`: the silent one) is replaced in place, so the spot keeps its order and cover. Rows already on the spot are left alone, so re-runs are safe; `--dry-run` prints what each row adds (+), replaces (~) or leaves (=) |
 
 ## Rules that hold everywhere
 
@@ -119,12 +124,70 @@ through Hyperdrive, R2 for photos. The iOS app's client is generated from `apps/
   A photo insert, update or delete touches its spot, so the cover in the index row syncs too.
 - **Cities**: a spot belongs to the smallest city whose area contains it (`spot_city_for()`, SQL). `saveCity()`
   re-files spots when an area changes.
+- **Automatic cities** (`src/services/city-places.ts`, Ertem 2026-11-25): a public spot submitted outside every city
+  (or an edit moving one there; never a private spot) has its place looked up off the request (`findCityAfter`,
+  `waitUntil`) by `findCityPlace` (`src/lib/nominatim.ts`): Nominatim's `reverse` at zoom 10; when its
+  `address.city` names a wider place, zoom 6 then 5 for the place of that name (Camden → Greater London, Mapo-gu →
+  Seoul, Brooklyn → New York); otherwise a suburb, quarter, neighbourhood, city district, borough, village or hamlet
+  gives way to zoom 8 unless that's a province (Kadıköy's Osmanağa → Kadıköy, Canggu → Badung); otherwise zoom 10's
+  answer (Shibuya, Paris); never a state or a country. The
+  place is stored in `osm_place` (its simplified boundary, else its box; names from its `name:<language>` tags first,
+  then its Wikidata labels, then its English name) and linked in `submission_place`, a table of its own so the
+  submission's `updated_at` (the reviewer's `seenUpdatedAt`) never moves. Approval makes the city from the stored place
+  inside its transaction (`fileFromStoredPlace`, a savepoint, no network), so the spot is filed in the same commit;
+  without one (an admin's own spot, a lookup still running or failed) `fileSpot()` runs after the commit. A rejected
+  submission makes no city. **Automatic cities never change an existing one**: insert only, a free slug (`-2`…),
+  the area is the place's minus every city's, and a place whose OpenStreetMap or Wikidata id a city has makes none;
+  hand-drawn cities (`create-city`) are how places are patched. **Nominatim is asked once per place, ever**: before
+  any request, a city containing the point, then a stored place containing it, then a miss remembered for its 0.01°
+  cell (`place_miss`, 21 days: no city there, or the point outside the simplified boundary; a failed or unreadable request is never remembered) answer instead. Requests
+  take the one `lookup_lease` row (all Workers; held a second past each request, OpenStreetMap's limit), and a lookup
+  waiting for it checks the stores again, so concurrent submissions in one new place make one request. The app gets
+  a `PlaceLookup` from `createApp()`; e2e passes fixtures (or none), so tests never call out. `GET /v1/cities` lists
+  only cities with a published public spot, so preloaded and freshly made ones appear with their first spot.
+- **City names**: `name` is English and the fallback; `names` holds one per app language (`CITY_LANGUAGES`), from the
+  city's Wikidata item (`wikidata_id`; CC0) by `wikidataCityNames()` (`src/lib/wikidata.ts`: Wikidata's `zh-hans`/`zh-hant`
+  labels, a missing one and English always `name`). `GET /v1/cities` carries them, so apps pick their language
+  offline; every other payload names a city by `cityId` (profiles' `editorOf` also by its English name). Search
+  matches every name. Server-written text (pushes, the share card) says `name`: the server doesn't know the reader's
+  language.
+- **City boundaries are open data** (ODbL, Ertem 2026-11-25): `GET /v1/cities/boundaries` (public,
+  `CityBoundariesSchema`) answers every row of `city`, hidden or shown, as a GeoJSON FeatureCollection
+  (`application/geo+json`, not the envelope; errors still are); `source` is `openstreetmap` when the city has an
+  `osm_place_id`. It reads `city` alone, never `osm_place`, `submission_place`, `place_miss` or submissions: a stored
+  place can tell where a pending spot was sent. About 5 MB, so each data center keeps it as text for a day and sends it
+  as stored (`sharedText`: parsing and checking it would cost ~50 ms of CPU a request), with `Cache-Control: public,
+  max-age=86400`, so a change of shape reaches everyone within a day. On 371 generated cities (284,000 vertices, 4.5 MB
+  in PostGIS, 6.4 MB out) the query ran in ~50 ms. The site's footer and `NOTICE.md` link it.
 - **Locations** use the `point` column type (`packages/db/src/schema/geo.ts`): it writes EWKT with SRID 4326 and
   reads hex EWKB. Drizzle's built-in `geometry` drops the SRID, which a 4326 column rejects. Distances in meters use
   `::geography` on both sides, which matches the expression index `spot_location_geography_gist`.
 - **Light and heavy rows**: the sync index row is what the map needs (title, kind, condition, point, cover) plus
   what apps filter on offline (obstacles); everything else comes from `GET /v1/spots?ids=` for the spots on screen.
   The sync and the collections snapshot select the same `indexColumns` (`src/services/spots.ts`).
+
+## Search
+
+- **`GET /v1/spots/search`** (`searchSpots`, `src/services/spot-search.ts`) finds published public spots by name for
+  the app's local search while its index is still syncing. Rows are the sync's `indexColumns`, so the app stores them
+  like synced ones.
+- **Names are compared in Latin letters.** `spot.search_text` is a stored generated column, `search_words(title)`
+  (SQL, migration 0033): Cyrillic romanised (й as both i and y, ё as e), lowercase by the built-in `pg_c_utf8`
+  whatever the database's collation, accents off (`unaccent`), anything but letters and digits a space. Queries go
+  through `search_fold()`, the same rules. Latin because pg_trgm sees only the letters the database's LC_CTYPE knows,
+  none of Cyrillic under `C`. A change to the rules is a migration that replaces the functions, then
+  `ALTER TABLE spot ALTER COLUMN search_text SET EXPRESSION AS (search_words(title))` to recompute every row (a table
+  rewrite fires no trigger, so versions stay put).
+- **Ranking:** 1, every query word starts a word of the name or of its city's name in any app language; 2, every word is inside the name;
+  3, a word of 5–7 letters with one wrong letter or of 8+ with two (Levenshtein from `fuzzystrmatch`, against a whole
+  word or the start of one); then distance from the optional point (`ST_DistanceSphere`), name, id. One `ORDER BY`
+  with `LIMIT`, so typo matches show only when exact ones don't fill `limit`.
+- **Indexes:** the trigram GIN `spot_search_trgm` serves `like` and `<%`; typo candidates come from `<%` with
+  `pg_trgm.word_similarity_threshold` set for the transaction just under the weakest match the rule allows
+  (`typoThreshold`), and Levenshtein confirms them. `spot_city_idx` serves city matches. On 100,000 generated spots
+  (a busy laptop) most queries took 30–200 ms; a one- or two-letter word has no trigram, so it scans (one letter:
+  about 0.6 s).
+- `pg_trgm`, `unaccent` and `fuzzystrmatch` are on PlanetScale's list of extensions that need no superuser or restart.
 
 ## Paging
 
@@ -175,7 +238,7 @@ through Hyperdrive, R2 for photos. The iOS app's client is generated from `apps/
   | (per address) | everything under `/v1`, before anything else | `ADDRESS_LIMITER` (1005) | 3,000/min per IP or IPv6 /64 |
   | (per account, or address without a token) | everything under `/v1` | `API_LIMITER` (1001) | 600/min |
   | (per address) | `POST /v1/auth/apple` | `AUTH_LIMITER` (1002) | 20/min |
-  | `contributions` | submissions, spot edits, photo uploads, videos | `WRITE_LIMITER` (1003) | 60/min (a 10-photo spot is 11) |
+  | `contributions` | submissions, spot edits, photo and clip uploads, videos | `WRITE_LIMITER` (1003) | 60/min (a 10-photo spot is 11) |
   | `votes` | `PUT /v1/spots/{id}/vote` | `WRITE_LIMITER` | 60/min |
   | `collections` | save/delete a collection, add/remove spots, change a role, remove a member, cancel an invite, answer an invitation or a request | `WRITE_LIMITER` | 60/min |
   | `review` | approve/reject/undo spots, edits and videos; take a spot down or restore it | `WRITE_LIMITER` | 60/min |
@@ -201,6 +264,8 @@ through Hyperdrive, R2 for photos. The iOS app's client is generated from `apps/
   of both cities. A stage with nobody in it passes to the next at once (a city without curators: admins at once). Banned accounts are in no stage. The
   daily cron (`reviewEscalations`, 09:00 UTC, `src/schedules.ts`) walks the last 30 days' pending changes; a stage
   already sent is the same idempotency key, which BuzzKit replays without sending.
+- **The queue names its cities** (`cities`: id, English name and `names` of every city its submissions are in), so a
+  card in a city made ahead of its first spot, which `GET /v1/cities` doesn't list yet, still reads in the app's language.
 - **Decisions are rows plus an audit event** (`review_event`: approve with the edits, reject with the reason, undo),
   written in the same transaction as the decision while the submission row is locked (`FOR UPDATE`). A CHECK
   constraint keeps the decision consistent: pending has no `reviewed_at`; approved has a `spot_id`; rejected has a reason.
@@ -238,6 +303,15 @@ through Hyperdrive, R2 for photos. The iOS app's client is generated from `apps/
   appearing or leaving touches its spot (trigger, migration 0012), so the spot gets a new version and apps fetch
   its details again. Who added a video is hidden from a viewer who blocked them; the video stays.
 - **Reports** accept `targetKind: "video"`.
+
+## Clips
+
+- **A clip plays in place of a photo**, looped, muted where it sits on a page and with its sound full screen; the photo stays its poster, so anything that shows only photos still works. `PUT /v1/clips/{clipId}` (`saveClip`, `src/services/clips.ts`) takes `video/mp4` up to 15 MB under the photo upload's id rules (outbox id, immutable, another account's is 403) at a random key (`clips/<uuid>.mp4`). A draft's photo names it as `clipId`, each clip once per draft, uploaded first (422 with `details.missingClips`).
+- **Metadata never reaches storage here either.** `cleanMp4()` (`src/lib/mp4.ts`) takes exactly one H.264 track (`avc1`/`avc3`) and at most one AAC sound track (`mp4a`), of at most 16 s (`CLIP_MAX_DURATION_MS`, also `clip_upload`'s CHECK) and 1920 px a side (the track header's size, turned by its matrix), with `moov` before `mdat` (faststart), unfragmented. It rebuilds the file as `ftyp`, `moov` (`mvhd`, and each track's `tkhd`, `edts`, `tref`, `mdia`), `mdat`, zeroes recording times and moves every chunk offset to match. Any other track (and a second sound) is refused, never dropped: its samples would stay in `mdat`, and timed metadata can carry locations.
+- **Served straight from R2** at `images.openskatemap.app/<key>`: a faststart MP4 plays as it loads, so no Images transformations (nothing counts against the cap), Stream or HLS.
+- **Carried through review like photos.** Approval copies a new upload's `submission_photo.clip_id` into `spot_photo.clip_id`; an edit's kept photos have no clip of their own, so the spot photo keeps whatever it has. The approve event's photos before carry `clipId`, so undo restores it (dropped if the clip was swept since).
+- **Details only**: `SpotPhoto.clip` and `SubmissionPhoto.clip` (`SpotPhotoClip`), left out when there is none. The sync index, share card and collections snapshot carry only the cover.
+- **Unused clips go after a week** like photos (`isUnusedClip`: no submission's or spot's photo plays it), sharing housekeeping's 1,000 a day after photos, and with an account's other unused uploads when it's deleted.
 
 ## Votes
 
@@ -312,10 +386,11 @@ through Hyperdrive, R2 for photos. The iOS app's client is generated from `apps/
   (anywhere in the name, or as a whole word for everyday words like "palace"). Taken and refused are both `conflict`, "isn't available":
   the app shows one message. Add a word there when a report shows one got through. The display name stays on Better Auth's `user.name`. Emptying a field
   is `clear: [...]`, never `null`: the generated Swift client can't send an explicit null.
-- **Public profiles never include an email.** Stats: submissions, approvals, cities with an approved spot.
+- **Public profiles never include an email.** Stats: submissions, approvals, cities with an approved spot (the spot's
+  `city_id`, which `saveCity()` keeps current; a decided submission's own `city_id` never moves); `joinedAt` is `user.createdAt`.
 - **Blocks** (`user_block`): the blocker no longer sees the blocked person's name on spots (added by, photo
   credit), and the blocked person gets `not_found` for the blocker's profile.
-- **Deleting an account** (`deleteAccount`) cascades its votes away, and also deletes its unused uploads (the avatar, photos never submitted),
+- **Deleting an account** (`deleteAccount`) cascades its votes away, and also deletes its unused uploads (the avatar, photos and clips never submitted),
   both rows and R2 objects. Submitted photos stay without attribution.
 - **Reports** (`report`, App Store guideline 1.2) go to admins; the target must exist. Admins work them in the
   database for now.
@@ -411,7 +486,7 @@ Worker secrets stay as they are (rotate one with `cf workers secrets update`). T
 | Hyperdrive `openskatemap-db` | PlanetScale integration, connecting as `openskatemap_app`; caching off, 15 origin connections. Created from the Cloudflare dashboard, then its credentials were replaced with the app role: the integration's own role inherits `postgres`, so it was deleted |
 | Worker `openskatemap-api` | `api.openskatemap.app`, placement `aws:us-east-1`, `workers.dev` off |
 | Worker `openskatemap-web` | `openskatemap.app` (apex custom domain), static assets plus a Worker for `/spots/*` and `/cards/spots/*`; bindings `API` (service → `openskatemap-api`), `IMAGES`; `workers.dev` off |
-| R2 `openskatemap-photos` (binding `PHOTOS`) | Private photos |
+| R2 `openskatemap-photos` (binding `PHOTOS`) | Photos and clips |
 
 Secrets live in the 1Password vault **OpenSkateMap**; GitHub holds copies in the `production` environment. After rotating a value in 1Password, update the GitHub secret too: `op read <ref> | gh secret set <NAME> --env production`.
 

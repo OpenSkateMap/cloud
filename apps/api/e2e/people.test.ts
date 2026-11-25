@@ -2,8 +2,10 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { z } from "@hono/zod-openapi";
 import { type Database, openDatabase, schema } from "@openskatemap/db";
 import { eq, inArray, sql } from "drizzle-orm";
+import { MeSchema } from "../src/lib/me.ts";
 import { BlockedUserSchema, PublicProfileSchema } from "../src/lib/people-schemas.ts";
 import { SpotDetailsSchema } from "../src/lib/spot-schemas.ts";
+import { boxArea, saveCity } from "../src/services/cities.ts";
 import { countingLimiter } from "../test/support.ts";
 import { call, createRider, e2eUrl, photosBucket, read } from "./support.ts";
 
@@ -77,6 +79,32 @@ describe.skipIf(!e2eUrl)("people (database)", () => {
       blockedByMe: false,
     });
     expect((await profileOf("nobody-at-all", other)).status).toBe(404);
+  });
+
+  test("a profile and the account both say when the account was created", async () => {
+    const [created] = await db.select({ at: user.createdAt }).from(user).where(eq(user.id, rider.userId));
+    const createdAt = created!.at.toISOString();
+    expect(PublicProfileSchema.parse((await profileOf(rider.userId, other)).body.data).joinedAt).toBe(createdAt);
+    expect(MeSchema.parse((await call("/v1/me", { headers: rider.bearer })).body.data).createdAt).toBe(createdAt);
+  });
+
+  test("cities count where approved spots are now, including a city drawn after the approval", async () => {
+    const lateSpotId = `e2e-${tag}-late-spot`;
+    const lateSubmissionId = crypto.randomUUID();
+    const lateSlug = `e2e-late-${tag}`;
+    const location = { latitude: -45.505, longitude: 170.505 };
+    await db.insert(spot).values({ id: lateSpotId, title: "Far spot", kind: "street", location, createdBy: third.userId });
+    await db.insert(submission).values({ id: lateSubmissionId, kind: "new_spot", title: "Far spot", spotKind: "street", location, submittedBy: third.userId, status: "approved", spotId: lateSpotId, reviewedAt: new Date() });
+    const cities = async () => PublicProfileSchema.parse((await profileOf(third.userId, other)).body.data).stats.cities;
+    try {
+      expect(await cities()).toBe(0);
+      await saveCity(db, { slug: lateSlug, name: `E2E late ${tag}`, countryCode: "NZ", area: boxArea([170.5, -45.51, 170.51, -45.5]) });
+      expect(await cities()).toBe(1);
+    } finally {
+      await db.delete(submission).where(eq(submission.id, lateSubmissionId));
+      await db.delete(spot).where(eq(spot.id, lateSpotId));
+      await db.delete(city).where(eq(city.slug, lateSlug));
+    }
   });
 
   test("you change only what you send, and handles are cleaned up", async () => {

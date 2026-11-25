@@ -1,0 +1,13 @@
+# Cities of a million people or more (cities, municipalities, city-states), for `bun run build-preload-list`. Wikidata is CC0.
+SELECT ?item ?population (SAMPLE(?cc) AS ?country) (SAMPLE(?label) AS ?name)
+WHERE {
+  { SELECT ?item (MAX(?p) AS ?population) WHERE { ?item wdt:P1082 ?p . FILTER(?p >= 1000000) } GROUP BY ?item }
+  FILTER EXISTS { VALUES ?cls { wd:Q515 wd:Q15284 wd:Q133442 } ?item wdt:P31/wdt:P279* ?cls . }
+  FILTER NOT EXISTS { ?item wdt:P31/wdt:P279* wd:Q1907114 }                                  # metropolitan areas
+  FILTER NOT EXISTS { ?item wdt:P31/wdt:P279* wd:Q47168 }                                    # counties of the United States
+  FILTER NOT EXISTS { ?item wdt:P576 [] }                                                     # dissolved
+  FILTER NOT EXISTS { ?item wdt:P31 wd:Q6256 . FILTER NOT EXISTS { ?item wdt:P31 wd:Q133442 } } # countries, except city-states
+  OPTIONAL { ?item wdt:P17/wdt:P297 ?cc }
+  OPTIONAL { ?item rdfs:label ?label . FILTER(LANG(?label) = "en") }
+}
+GROUP BY ?item ?population

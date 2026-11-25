@@ -1,8 +1,10 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, index, integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth.ts";
+import { clipUpload } from "./clips.ts";
 import { collection } from "./collections.ts";
 import { point } from "./geo.ts";
+import { osmPlace } from "./places.ts";
 import { city, SPOT_CONDITIONS, SPOT_KINDS, spot } from "./spots.ts";
 
 export const SUBMISSION_KINDS = ["new_spot", "edit_spot"] as const;
@@ -80,11 +82,27 @@ export const submissionPhoto = pgTable(
     credit: text("credit"),
     hasPermission: boolean("has_permission").notNull(),
     sourceUrl: text("source_url"),
+    clipId: text("clip_id").references(() => clipUpload.id, { onDelete: "set null" }),
   },
   (table) => [
     primaryKey({ columns: [table.submissionId, table.position] }),
     index("submission_photo_photo_idx").on(table.photoId),
+    index("submission_photo_clip_idx").on(table.clipId).where(sql`${table.clipId} is not null`),
     check("submission_photo_rights", sql`${table.credit} is null or ${table.hasPermission}`),
     check("submission_photo_source", sql`(${table.photoId} is null) <> (${table.spotPhotoId} is null)`),
   ],
+);
+
+/** The place a pending public submission outside every city was found in; a row of its own, so the lookup never moves the submission's `updated_at`. */
+export const submissionPlace = pgTable(
+  "submission_place",
+  {
+    submissionId: text("submission_id")
+      .primaryKey()
+      .references(() => submission.id, { onDelete: "cascade" }),
+    osmPlaceId: text("osm_place_id")
+      .notNull()
+      .references(() => osmPlace.id),
+  },
+  (table) => [index("submission_place_osm_place_idx").on(table.osmPlaceId)],
 );

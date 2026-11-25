@@ -19,12 +19,13 @@ export const photosBucket = (() => {
   };
 })();
 
-const app = createApp();
+// Nothing finds cities by calling out unless a suite passes its own lookup (`city-places.test.ts`).
+const app = createApp({ placeLookup: null });
 const env = bindings({ HYPERDRIVE: { connectionString: e2eUrl }, PHOTOS: photosBucket });
 
-export async function call(path: string, init: RequestInit = {}, extraBindings: Record<string, unknown> = {}) {
+export async function call(path: string, init: RequestInit = {}, extraBindings: Record<string, unknown> = {}, via: ReturnType<typeof createApp> = app) {
   const { ctx, settle } = executionContext();
-  const response = await app.request(path, init, { ...env, ...extraBindings }, ctx);
+  const response = await via.request(path, init, { ...env, ...extraBindings }, ctx);
   const body = await response.json();
   await settle();
   return { status: response.status, headers: response.headers, body: body as { ok: boolean; data?: Record<string, unknown>; error?: { code: string } } };

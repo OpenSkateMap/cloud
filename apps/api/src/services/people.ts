@@ -54,9 +54,11 @@ export async function publicProfile(db: Database, viewerId: string, userId: stri
     .select({
       submitted: sql<number>`count(*)`.mapWith(Number),
       approved: sql<number>`count(*) filter (where ${submission.status} = 'approved')`.mapWith(Number),
-      cities: countDistinct(sql`case when ${submission.status} = 'approved' then ${submission.cityId} end`),
+      // The spot's city, not the submission's: saveCity() re-files spots, while a decided submission keeps the city it had.
+      cities: countDistinct(sql`case when ${submission.status} = 'approved' then ${spot.cityId} end`),
     })
     .from(submission)
+    .leftJoin(spot, eq(spot.id, submission.spotId))
     .where(and(eq(submission.submittedBy, userId), not(isPrivateSubmission), not(isTakenDown)));
 
   return ok({

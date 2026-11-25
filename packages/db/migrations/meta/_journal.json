@@ -225,6 +225,41 @@
       "when": 1793344948210,
       "tag": "0031_spot_photo_edits",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1795504698773,
+      "tag": "0032_spot_clips",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1795586122131,
+      "tag": "0033_search_functions",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1795586150551,
+      "tag": "0034_spot_search_text",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1795597695750,
+      "tag": "0035_city_names",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1795599046161,
+      "tag": "0036_automatic_cities",
+      "breakpoints": true
     }
   ]
 }

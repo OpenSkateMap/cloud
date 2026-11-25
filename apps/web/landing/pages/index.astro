@@ -322,6 +322,7 @@ const promises = [
       <p class="wrap credits">
         Photos from Wikimedia Commons:{" "}
         {credits.map((c, i) => <Fragment>{i > 0 && "; "}<a href={c.page}>{c.author}</a> ({c.licence})</Fragment>)}.
+        City boundaries © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a> (<a href="https://opendatacommons.org/licenses/odbl/">ODbL</a>, <a href="https://api.openskatemap.app/v1/cities/boundaries">download</a>).
       </p>
     </footer>
     <script src="../scripts/site.ts"></script>

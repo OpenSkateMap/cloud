@@ -36,3 +36,10 @@ The `credits.json` in each folder holds the same records.
 | `videos/*.jpg` | YouTube thumbnails of [Ace Trucks: Turn Right](https://www.youtube.com/watch?v=mZEVi6EvJPc) and [Lucien Genand: Boardslide Hood](https://www.youtube.com/watch?v=fQ0Il9tOfsA), © their owners |
 | Inter Display (`apps/web/fonts`, [rsms/inter](https://github.com/rsms/inter) v4.1, unmodified) | © The Inter Project Authors, under the [SIL Open Font License 1.1](apps/web/fonts/OFL.txt) |
 | The landing page's avatars | DiceBear's [Notionists](https://www.dicebear.com/styles/notionists/) style by Zoish, [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), drawn at build time |
+
+## Data the service stores
+
+City boundaries the API finds itself come from [OpenStreetMap](https://www.openstreetmap.org/copyright), © OpenStreetMap
+contributors, under the [ODbL](https://opendatacommons.org/licenses/odbl/); the website's footer and the app's
+Acknowledgements say so. Every city's boundary is available under the ODbL as GeoJSON at
+<https://api.openskatemap.app/v1/cities/boundaries>. City names come from OpenStreetMap and from Wikidata ([CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)).
